@@ -421,10 +421,12 @@ async function getHistPrecip(lat, lon) {
   const { x, y } = latLonToUTM33(lat, lon);
   const end   = todayISO();
   const start = new Date(Date.now() - 7*24*3600e3).toISOString().slice(0, 10);
-  const url   = `${GTS}/${x}/${y}/${start}/${end}/rr.csv`;
+  const gtsUrl = `${GTS}/${x}/${y}/${start}/${end}/rr.csv`;
+  // gts.nve.no lacks CORS headers → route via proxy
+  const url  = `https://api.allorigins.win/raw?url=${encodeURIComponent(gtsUrl)}`;
   const resp  = await fetch(url);
   const text  = await resp.text();
-  if (text.includes('Error') || text.includes('does not exist')) return null;
+  if (!resp.ok || text.includes('ErrorMessage') || text.includes('No cell exists')) return null;
 
   const lines = text.trim().split('\n').filter(l => !l.startsWith('#') && l.includes(';'));
   lines.shift(); // header row
