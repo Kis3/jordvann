@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vannmetning i jord – seNorge ODM</title>
+  <title>Skredvarsel Fv 609 Heilevang</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
@@ -133,6 +133,20 @@
     .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Footer credit */
+    #map-credit {
+      position: absolute;
+      bottom: 24px;
+      left: 8px;
+      z-index: 1000;
+      font-size: 9px;
+      color: #555;
+      background: rgba(255,255,255,0.75);
+      padding: 2px 5px;
+      border-radius: 3px;
+      pointer-events: none;
+    }
+
     /* Map click marker */
     .click-pin { width: 12px; height: 12px; background: #fff; border: 3px solid #e94560; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
 
@@ -151,7 +165,7 @@
 
 <!-- ── SIDEBAR ────────────────────────────────────────── -->
 <div id="sidebar">
-  <h1>Vannmetning i jord<span>seNorge ODM + Nedbør</span></h1>
+  <h1>Skredvarsel Fv 609 Heilevang<span>seNorge ODM + Nedbør</span></h1>
 
   <!-- Vannmetning WMS -->
   <div class="card">
@@ -220,6 +234,7 @@
 
 <!-- ── MAP ────────────────────────────────────────────── -->
 <div id="map"></div>
+<div id="map-credit">Utviklet av Norconsult Norge AS v/Torgeir Fiskum Hansvik</div>
 
 <!-- ── RAPPORT-PANEL ─────────────────────────────────── -->
 <div id="report">
@@ -758,9 +773,11 @@ function init() {
 
   smLayer = makeArcLayer('odmhbv_ssspct', dateToEpoch(today), 0.10);
   smLayer.addTo(map);
+  smLayer.setOpacity(0.10);
 
   rrLayer = makeArcLayer('rr', dateToEpoch(today), 0.10);
   rrLayer.addTo(map);
+  rrLayer.setOpacity(0.10);
 
   addStationMarker();
 
