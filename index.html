@@ -421,9 +421,8 @@ async function getHistPrecip(lat, lon) {
   const { x, y } = latLonToUTM33(lat, lon);
   const end   = todayISO();
   const start = new Date(Date.now() - 7*24*3600e3).toISOString().slice(0, 10);
-  const gtsUrl = `${GTS}/${x}/${y}/${start}/${end}/rr.csv`;
-  // gts.nve.no lacks CORS headers → route via proxy
-  const url  = `https://api.allorigins.win/raw?url=${encodeURIComponent(gtsUrl)}`;
+  // Route via Vercel serverless proxy – gts.nve.no lacks CORS headers
+  const url  = `/api/gts?x=${x}&y=${y}&start=${start}&end=${end}`;
   const resp  = await fetch(url);
   const text  = await resp.text();
   if (!resp.ok || text.includes('ErrorMessage') || text.includes('No cell exists')) return null;
