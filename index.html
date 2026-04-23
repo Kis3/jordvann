@@ -46,7 +46,7 @@
     .legend-box { width: 18px; height: 11px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
 
     /* ── MAP ── */
-    #map { flex: 1; min-width: 0; cursor: crosshair !important; }
+    #map { flex: 1; min-width: 0; cursor: crosshair !important; position: relative; }
     #map .leaflet-container { cursor: crosshair !important; }
 
     /* ── REPORT PANEL ── */
@@ -233,8 +233,9 @@
 </div>
 
 <!-- ── MAP ────────────────────────────────────────────── -->
-<div id="map"></div>
-<div id="map-credit">Utviklet av Norconsult Norge AS v/Torgeir Fiskum Hansvik</div>
+<div id="map">
+  <div id="map-credit">Utviklet av Norconsult Norge AS v/Torgeir Fiskum Hansvik</div>
+</div>
 
 <!-- ── RAPPORT-PANEL ─────────────────────────────────── -->
 <div id="report">
