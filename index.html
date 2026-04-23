@@ -159,7 +159,7 @@
     <label>Dato</label>
     <input type="date" id="sm-date" onchange="updateSmLayer()" />
     <label>Gjennomsiktighet</label>
-    <input type="range" id="sm-opacity" min="10" max="100" value="70" step="5"
+    <input type="range" id="sm-opacity" min="10" max="100" value="30" step="5"
       oninput="smLayer && smLayer.setOpacity(this.value/100)" />
     <div class="toggle-row">
       <input type="checkbox" id="toggle-sm" checked onchange="toggleLayer('sm',this.checked)" />
@@ -179,7 +179,7 @@
     <label>Dato</label>
     <input type="date" id="rr-date" onchange="updateRrLayer()" />
     <label>Gjennomsiktighet</label>
-    <input type="range" id="rr-opacity" min="10" max="100" value="70" step="5"
+    <input type="range" id="rr-opacity" min="10" max="100" value="30" step="5"
       oninput="rrLayer && rrLayer.setOpacity(this.value/100)" />
     <div class="toggle-row">
       <input type="checkbox" id="toggle-rr" checked onchange="toggleLayer('rr',this.checked)" />
