@@ -284,6 +284,7 @@
     <div class="r-section" id="r-frost" style="display:none">
       <h3>FØRDE PLU (SN57162) – timesmålinger</h3>
       <div id="r-frost-body"></div>
+      <canvas id="chart-frost" style="margin-top:8px"></canvas>
     </div>
   </div>
 </div>
@@ -322,7 +323,7 @@ function latLonToUTM33(lat, lon) {
 //  STATE
 // ──────────────────────────────────────────────────────────────────────────
 let map, smLayer, rrLayer, clickMarker;
-let chartFc = null, chartHist = null;
+let chartFc = null, chartHist = null, chartFrost = null;
 
 // ──────────────────────────────────────────────────────────────────────────
 //  ARCGIS IMAGE LAYER (tile-based, EPSG:3857)
@@ -464,9 +465,9 @@ async function getPlaceName(lat, lon) {
 // ──────────────────────────────────────────────────────────────────────────
 //  FROST – FØRDE PLU historical
 // ──────────────────────────────────────────────────────────────────────────
-async function getFrostPrecip() {
+async function getFrostPrecip(hours = 24) {
   const now  = new Date();
-  const from = new Date(now - 24 * 3600e3);
+  const from = new Date(now - hours * 3600e3);
   const fmt  = d => d.toISOString().replace(/\.\d+Z$/, 'Z');
   const path = `/observations/v0.jsonld?sources=${STATION.id}:0`
              + `&elements=${encodeURIComponent('sum(precipitation_amount PT1H)')}`
@@ -486,8 +487,9 @@ async function getFrostPrecip() {
 //  CHART HELPERS
 // ──────────────────────────────────────────────────────────────────────────
 function destroyCharts() {
-  if (chartFc)   { chartFc.destroy();   chartFc   = null; }
-  if (chartHist) { chartHist.destroy(); chartHist = null; }
+  if (chartFc)    { chartFc.destroy();    chartFc    = null; }
+  if (chartHist)  { chartHist.destroy();  chartHist  = null; }
+  if (chartFrost) { chartFrost.destroy(); chartFrost = null; }
 }
 
 function barChart(id, labels, data, color, yLabel) {
@@ -628,12 +630,12 @@ async function generateReport(lat, lon) {
     document.getElementById('r-hist-total').textContent = 'Ikke tilgjengelig';
   }
 
-  // ── Frost station ──
+  // ── Frost station (nearby) ──
   if (nearStation) {
     document.getElementById('r-frost').style.display = '';
     setLoading('r-frost-body', true);
     try {
-      const frostPts = await getFrostPrecip();
+      const frostPts = await getFrostPrecip(24);
       const last1h   = frostPts.at(-1)?.v ?? null;
       const sum24h   = frostPts.reduce((s, p) => s + p.v, 0);
       document.getElementById('r-frost-body').innerHTML = `
@@ -649,6 +651,82 @@ async function generateReport(lat, lon) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+//  GENERATE STATION REPORT (klikk direkte på stasjonmarkør)
+// ──────────────────────────────────────────────────────────────────────────
+async function generateStationReport() {
+  const { lat, lon } = { lat: STATION.lat, lon: STATION.lon };
+  document.getElementById('inp-lat').value = lat.toFixed(4);
+  document.getElementById('inp-lon').value = lon.toFixed(4);
+
+  if (clickMarker) map.removeLayer(clickMarker);
+  clickMarker = L.marker([lat, lon], {
+    icon: L.divIcon({ className: '', html: '<div class="click-pin"></div>', iconSize:[12,12], iconAnchor:[6,6] }),
+    zIndexOffset: 500,
+  }).addTo(map);
+
+  destroyCharts();
+  showSections(['r-loc','r-frost','r-fc']);
+  document.getElementById('r-loc-name').textContent   = STATION.name;
+  document.getElementById('r-loc-coords').textContent = `${lat.toFixed(4)}°N  ${lon.toFixed(4)}°Ø`;
+  setLoading('r-frost-body', true);
+  ['fc-1h','fc-3h','fc-6h','fc-24h'].forEach(id => document.getElementById(id).textContent = '…');
+
+  const [frostRes, forecastRes] = await Promise.allSettled([
+    getFrostPrecip(48),
+    getForecast(lat, lon),
+  ]);
+
+  // ── Frost data ──
+  const pts = frostRes.value || [];
+  if (pts.length) {
+    const last1h = pts.at(-1)?.v ?? null;
+    const sum24h = pts.slice(-24).reduce((s, p) => s + p.v, 0);
+    const sum48h = pts.reduce((s, p) => s + p.v, 0);
+    document.getElementById('r-frost-body').innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;text-align:center">
+        <div>
+          <div style="font-size:20px;font-weight:700;color:#58a6ff">${last1h !== null ? last1h.toFixed(1) : '–'}</div>
+          <div style="font-size:9px;color:#8b949e">mm siste 1t</div>
+        </div>
+        <div>
+          <div style="font-size:20px;font-weight:700;color:#58a6ff">${sum24h.toFixed(1)}</div>
+          <div style="font-size:9px;color:#8b949e">mm siste 24t</div>
+        </div>
+        <div>
+          <div style="font-size:20px;font-weight:700;color:#58a6ff">${sum48h.toFixed(1)}</div>
+          <div style="font-size:9px;color:#8b949e">mm siste 48t</div>
+        </div>
+      </div>
+      <div style="font-size:9px;color:#6e7681">Pluviometer · MET Frost · timesmålinger</div>`;
+    const labels = pts.map(p =>
+      p.t.toLocaleString('nb-NO', { weekday:'short', hour:'2-digit', minute:'2-digit' })
+    );
+    chartFrost = barChart('chart-frost', labels, pts.map(p => p.v), '#58a6ff', 'mm/t');
+  } else {
+    document.getElementById('r-frost-body').textContent = 'Ingen data fra Frost';
+  }
+
+  // ── YR forecast ──
+  const fc = forecastRes.value;
+  if (fc) {
+    const series = fc.properties?.timeseries || [];
+    const p1h  = series[0]?.data?.next_1_hours?.details?.precipitation_amount ?? 0;
+    const p3h  = series.slice(0,3).reduce((s,t) => s+(t?.data?.next_1_hours?.details?.precipitation_amount??0),0);
+    const p6h  = series[0]?.data?.next_6_hours?.details?.precipitation_amount
+              ?? series.slice(0,6).reduce((s,t) => s+(t?.data?.next_1_hours?.details?.precipitation_amount??0),0);
+    const p24h = series.slice(0,24).reduce((s,t) => s+(t?.data?.next_1_hours?.details?.precipitation_amount??0),0);
+    document.getElementById('fc-1h').textContent  = p1h.toFixed(1);
+    document.getElementById('fc-3h').textContent  = p3h.toFixed(1);
+    document.getElementById('fc-6h').textContent  = p6h.toFixed(1);
+    document.getElementById('fc-24h').textContent = p24h.toFixed(0);
+    const fcSeries = series.slice(0,48);
+    const fcLabels = fcSeries.map(s => new Date(s.time).toLocaleString('nb-NO',{weekday:'short',hour:'2-digit',minute:'2-digit'}));
+    const fcData   = fcSeries.map(s => s.data?.next_1_hours?.details?.precipitation_amount ?? 0);
+    chartFc = barChart('chart-fc', fcLabels, fcData, '#1d6fa4', 'mm/t');
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 //  STATION MARKER (FØRDE PLU)
 // ──────────────────────────────────────────────────────────────────────────
 function addStationMarker() {
@@ -659,7 +737,7 @@ function addStationMarker() {
   });
   const m = L.marker([STATION.lat, STATION.lon], { icon, zIndexOffset: 1000 });
   m.bindTooltip(`<b>${STATION.name}</b><br>${STATION.id} · Nedbørsstasjon`, { direction: 'top', offset: [0,-8] });
-  m.on('click', () => generateReport(STATION.lat, STATION.lon));
+  m.on('click', e => { L.DomEvent.stopPropagation(e); generateStationReport(); });
   m.addTo(map);
 }
 
