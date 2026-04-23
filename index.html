@@ -6,168 +6,189 @@
   <title>Vannmetning i jord – seNorge ODM</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; display: flex; height: 100vh; overflow: hidden; background: #0d1117; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #0d1117; color: #c9d1d9; }
 
-    /* ── Sidebar ── */
+    body { display: flex; flex-direction: row; }
+
+    /* ── SIDEBAR ── */
     #sidebar {
-      width: 270px; flex-shrink: 0;
-      background: #161b22; color: #c9d1d9;
-      display: flex; flex-direction: column;
-      padding: 14px; gap: 10px;
-      overflow-y: auto;
+      width: 250px; flex-shrink: 0;
+      background: #161b22;
       border-right: 1px solid #30363d;
-      z-index: 500;
+      display: flex; flex-direction: column;
+      padding: 12px; gap: 8px;
+      overflow-y: auto; z-index: 10;
     }
-    #sidebar h1 { font-size: 14px; font-weight: 700; color: #e6edf3; line-height: 1.3; }
+    #sidebar h1 { font-size: 13px; font-weight: 700; color: #e6edf3; line-height: 1.3; }
     #sidebar h1 span { display: block; font-size: 10px; font-weight: 400; color: #8b949e; margin-top: 2px; }
 
-    .section { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px 12px; }
-    .section h2 { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #8b949e; margin-bottom: 8px; }
+    .card { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px 11px; }
+    .card h2 { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #8b949e; margin-bottom: 7px; }
 
-    #status { font-size: 11px; padding: 6px 10px; border-radius: 6px; background: #161b22; border: 1px solid #30363d; line-height: 1.4; }
-    .loading { color: #d29922 !important; border-color: #d29922 !important; }
-    .error   { color: #f85149 !important; border-color: #f85149 !important; }
-    .success { color: #3fb950 !important; border-color: #3fb950 !important; }
-
-    label { font-size: 11px; color: #8b949e; display: block; margin-bottom: 3px; margin-top: 8px; }
+    label { font-size: 10px; color: #8b949e; display: block; margin-bottom: 2px; margin-top: 6px; }
     label:first-child { margin-top: 0; }
     select, input[type=date] {
-      width: 100%; padding: 5px 7px;
+      width: 100%; padding: 4px 6px;
       background: #161b22; color: #c9d1d9;
-      border: 1px solid #30363d; border-radius: 6px;
-      font-size: 11px; cursor: pointer;
+      border: 1px solid #30363d; border-radius: 5px;
+      font-size: 10px; cursor: pointer;
     }
     input[type=range] { width: 100%; cursor: pointer; accent-color: #58a6ff; }
-    select:focus, input:focus { outline: none; border-color: #58a6ff; }
-
-    .toggle-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; }
+    .toggle-row { display: flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 10px; }
     .toggle-row label { margin: 0; color: #c9d1d9; cursor: pointer; }
 
-    /* Legend */
-    .legend-grid { display: grid; gap: 4px; }
-    .legend-item { display: flex; align-items: center; gap: 7px; font-size: 11px; }
-    .legend-box  { width: 20px; height: 12px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.12); flex-shrink: 0; }
+    .legend-grid { display: grid; gap: 3px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 10px; }
+    .legend-box { width: 18px; height: 11px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
 
-    /* ── Map ── */
-    #map { flex: 1; position: relative; }
+    /* ── MAP ── */
+    #map { flex: 1; min-width: 0; cursor: crosshair !important; }
+    #map .leaflet-container { cursor: crosshair !important; }
 
-    /* ── Station panel ── */
-    #station-panel {
-      position: absolute; bottom: 24px; right: 16px;
-      width: 350px; max-height: 72vh; overflow-y: auto;
-      background: #161b22; color: #c9d1d9;
-      border: 1px solid #30363d; border-radius: 12px;
-      padding: 0;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.65);
-      z-index: 1000; display: none;
+    /* ── REPORT PANEL ── */
+    #report {
+      width: 340px; flex-shrink: 0;
+      background: #161b22;
+      border-left: 1px solid #30363d;
+      display: flex; flex-direction: column;
+      overflow: hidden;
     }
 
-    /* Panel header – dark blue strip */
-    #panel-head {
-      background: #1d3557;
-      border-radius: 12px 12px 0 0;
-      padding: 14px 16px 12px;
-      display: flex; justify-content: space-between; align-items: flex-start;
+    #report-head {
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid #30363d;
+      flex-shrink: 0;
     }
-    #panel-name { font-size: 14px; font-weight: 700; color: #e6edf3; }
-    #panel-id   { font-size: 10px; color: #a8c6e8; margin-top: 2px; }
-    .close-btn { cursor: pointer; color: #a8c6e8; font-size: 22px; line-height: 1; flex-shrink: 0; }
-    .close-btn:hover { color: #fff; }
+    #report-head h2 { font-size: 11px; font-weight: 700; color: #e6edf3; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.06em; }
 
-    /* Current value pill */
-    #panel-current {
-      display: flex; gap: 10px; padding: 12px 16px;
-      border-bottom: 1px solid #21262d;
+    .coord-row { display: flex; gap: 5px; align-items: flex-end; }
+    .coord-field { flex: 1; }
+    .coord-field label { font-size: 9px; color: #8b949e; margin-bottom: 2px; }
+    .coord-field input {
+      width: 100%; padding: 5px 6px;
+      background: #0d1117; color: #e6edf3;
+      border: 1px solid #30363d; border-radius: 5px; font-size: 11px;
     }
-    .stat-pill {
-      flex: 1; background: #0d1117; border: 1px solid #30363d;
-      border-radius: 8px; padding: 8px 10px; text-align: center;
+    .coord-field input:focus { outline: none; border-color: #58a6ff; }
+    .gen-btn {
+      padding: 5px 10px; background: #238636; color: #fff;
+      border: none; border-radius: 5px; font-size: 11px; cursor: pointer;
+      flex-shrink: 0; white-space: nowrap; font-weight: 600;
     }
-    .stat-pill .val { font-size: 20px; font-weight: 700; color: #58a6ff; }
-    .stat-pill .unit { font-size: 9px; color: #8b949e; margin-top: 1px; }
-    .stat-pill .lbl { font-size: 9px; color: #8b949e; margin-bottom: 4px; }
+    .gen-btn:hover { background: #2ea043; }
 
-    .panel-body { padding: 12px 16px; }
-    .panel-sub  { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: #8b949e; margin: 12px 0 6px; }
-    .panel-sub:first-child { margin-top: 0; }
+    #report-body {
+      flex: 1; overflow-y: auto;
+      padding: 12px 14px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
 
-    canvas { max-height: 140px; }
+    /* Empty state */
+    #report-empty {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      height: 100%; gap: 10px; color: #8b949e; text-align: center; padding: 20px;
+    }
+    #report-empty .icon { font-size: 36px; opacity: 0.4; }
+    #report-empty p { font-size: 11px; line-height: 1.5; }
 
-    /* Forecast bars */
-    .p-row  { display: flex; align-items: center; gap: 5px; font-size: 10px; margin-bottom: 3px; }
-    .p-time { color: #8b949e; width: 56px; flex-shrink: 0; font-size: 9px; }
-    .p-bar  { height: 7px; background: #1d6fa4; border-radius: 2px; min-width: 2px; }
-    .p-val  { width: 34px; text-align: right; flex-shrink: 0; color: #8b949e; }
+    /* Report sections */
+    .r-section { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px 12px; }
+    .r-section h3 { font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: #8b949e; margin-bottom: 8px; }
 
-    /* Station marker pulse ring */
+    /* Location */
+    #r-loc-name { font-size: 13px; font-weight: 700; color: #e6edf3; margin-bottom: 2px; }
+    #r-loc-coords { font-size: 10px; color: #8b949e; font-family: monospace; }
+
+    /* Vannmetning */
+    .sm-value { font-size: 28px; font-weight: 700; margin: 4px 0 2px; }
+    .sm-label { font-size: 11px; }
+    .progress-track { height: 8px; background: #21262d; border-radius: 4px; margin: 6px 0; overflow: hidden; }
+    .progress-fill  { height: 100%; border-radius: 4px; transition: width 0.4s; }
+    .sm-source { font-size: 9px; color: #6e7681; margin-top: 4px; }
+
+    /* Precip forecast grid */
+    .precip-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .precip-cell {
+      background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+      padding: 7px 5px; text-align: center;
+    }
+    .precip-cell .pval { font-size: 16px; font-weight: 700; color: #58a6ff; }
+    .precip-cell .punit { font-size: 9px; color: #8b949e; }
+    .precip-cell .plbl { font-size: 9px; color: #8b949e; margin-bottom: 3px; }
+
+    /* Charts */
+    .chart-wrap { margin-top: 8px; }
+    .chart-lbl { font-size: 9px; color: #8b949e; margin-bottom: 4px; }
+    canvas { max-height: 120px !important; }
+
+    /* Frost station section */
+    #r-frost { display: none; }
+
+    /* Loading spinner */
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Map click marker */
+    .click-pin { width: 12px; height: 12px; background: #fff; border: 3px solid #e94560; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+
+    /* Station marker */
     @keyframes pulse {
-      0%   { transform: scale(1);   opacity: 0.7; }
-      70%  { transform: scale(2.2); opacity: 0; }
-      100% { transform: scale(2.2); opacity: 0; }
+      0%   { transform: scale(1);   opacity: 0.6; }
+      70%  { transform: scale(2.4); opacity: 0; }
+      100% { transform: scale(2.4); opacity: 0; }
     }
-    .station-dot-wrap { position: relative; width: 16px; height: 16px; }
-    .station-dot      { width: 14px; height: 14px; background: #1d6fa4; border: 2.5px solid #fff; border-radius: 50%; position: absolute; top: 1px; left: 1px; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
-    .station-pulse    { width: 14px; height: 14px; background: #1d6fa4; border-radius: 50%; position: absolute; top: 1px; left: 1px; animation: pulse 2s infinite; }
+    .st-wrap  { position: relative; width: 16px; height: 16px; }
+    .st-dot   { width: 14px; height: 14px; background: #1d6fa4; border: 2.5px solid #fff; border-radius: 50%; position: absolute; top: 1px; left: 1px; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+    .st-pulse { width: 14px; height: 14px; background: #1d6fa4; border-radius: 50%; position: absolute; top: 1px; left: 1px; animation: pulse 2s infinite; }
   </style>
 </head>
 <body>
 
-<!-- ── Sidebar ──────────────────────────────────────────── -->
+<!-- ── SIDEBAR ────────────────────────────────────────── -->
 <div id="sidebar">
-  <h1>Vannmetning i jord<span>seNorge ODM + Nedbør Frost/YR</span></h1>
+  <h1>Vannmetning i jord<span>seNorge ODM + Nedbør</span></h1>
 
-  <div id="status" class="loading">Starter…</div>
-
-  <!-- Vannmetning WMS – fast ODM/HBV-lag -->
-  <div class="section">
-    <h2>Vannmetning i jord (ODM/HBV)</h2>
-    <p style="font-size:10px;color:#8b949e;margin-bottom:6px">
-      <code>odmhbv_ssspct</code> – seNorge 1×1 km rutenett
-    </p>
-
+  <!-- Vannmetning WMS -->
+  <div class="card">
+    <h2>Vannmetning ODM/HBV</h2>
     <label>Dato</label>
     <input type="date" id="sm-date" onchange="updateSmLayer()" />
-
     <label>Gjennomsiktighet</label>
     <input type="range" id="sm-opacity" min="10" max="100" value="70" step="5"
       oninput="smLayer && smLayer.setOpacity(this.value/100)" />
-
     <div class="toggle-row">
-      <input type="checkbox" id="toggle-sm" checked onchange="toggleLayer('sm', this.checked)" />
+      <input type="checkbox" id="toggle-sm" checked onchange="toggleLayer('sm',this.checked)" />
       <label for="toggle-sm">Vis lag</label>
     </div>
   </div>
 
   <!-- Nedbør WMS -->
-  <div class="section">
+  <div class="card">
     <h2>Nedbør (seNorge rutenett)</h2>
-
-    <label>Tidsoppløsning</label>
+    <label>Oppløsning</label>
     <select id="rr-layer" onchange="updateRrLayer()">
       <option value="rr" selected>Døgn (mm/d)</option>
       <option value="rr3h">3 timer (mm)</option>
       <option value="rr3d">3 døgn (mm)</option>
-      <option value="gwb_rr">GWB-modell døgn (mm)</option>
     </select>
-
     <label>Dato</label>
     <input type="date" id="rr-date" onchange="updateRrLayer()" />
-
     <label>Gjennomsiktighet</label>
     <input type="range" id="rr-opacity" min="10" max="100" value="65" step="5"
       oninput="rrLayer && rrLayer.setOpacity(this.value/100)" />
-
     <div class="toggle-row">
-      <input type="checkbox" id="toggle-rr" checked onchange="toggleLayer('rr', this.checked)" />
+      <input type="checkbox" id="toggle-rr" checked onchange="toggleLayer('rr',this.checked)" />
       <label for="toggle-rr">Vis lag</label>
     </div>
   </div>
 
   <!-- Legends -->
-  <div class="section">
+  <div class="card">
     <h2>Tegnforklaring – vannmetning %</h2>
     <div class="legend-grid">
       <div class="legend-item"><div class="legend-box" style="background:#d73027"></div>&gt; 90 % – Mettet</div>
@@ -178,201 +199,241 @@
     </div>
   </div>
 
-  <div class="section">
+  <div class="card">
     <h2>Tegnforklaring – nedbør (mm)</h2>
     <div class="legend-grid">
-      <div class="legend-item"><div class="legend-box" style="background:#f0f9ff"></div>&lt; 0.5 mm – Nesten ingen</div>
+      <div class="legend-item"><div class="legend-box" style="background:#f0f9ff;border-color:#c0d8ef"></div>&lt; 0.5 mm</div>
       <div class="legend-item"><div class="legend-box" style="background:#bdd7ee"></div>0.5–2 mm</div>
       <div class="legend-item"><div class="legend-box" style="background:#6baed6"></div>2–5 mm</div>
       <div class="legend-item"><div class="legend-box" style="background:#2171b5"></div>5–10 mm</div>
       <div class="legend-item"><div class="legend-box" style="background:#08306b"></div>10–20 mm</div>
-      <div class="legend-item">
-        <div class="legend-box" style="background:linear-gradient(to right,#08306b,#4a006e)"></div>
-        &gt; 20 mm – Kraftig
-      </div>
+      <div class="legend-item"><div class="legend-box" style="background:linear-gradient(to right,#08306b,#4a006e)"></div>&gt; 20 mm</div>
     </div>
-    <p style="font-size:9px;color:#6e7681;margin-top:6px">Farger vises slik seNorge eksporterer dem fra ArcGIS Image Server.</p>
     <div style="margin-top:8px" class="legend-grid">
       <div class="legend-item">
-        <div style="width:13px;height:13px;background:#1d6fa4;border:2px solid #fff;border-radius:50%;flex-shrink:0"></div>
-        Nedbørsstasjon – FØRDE PLU (Frost)
+        <div style="width:12px;height:12px;background:#1d6fa4;border:2px solid #fff;border-radius:50%;flex-shrink:0"></div>
+        Nedbørsstasjon – FØRDE PLU
       </div>
     </div>
-  </div>
-
-  <!-- Om -->
-  <div class="section">
-    <h2>Om dataene</h2>
-    <p style="font-size:10px;color:#8b949e;line-height:1.6">
-      <b>Vannmetning</b> – seNorge 1×1 km rutenett (ODM-modell), daglig. Vann i terreng som % av maks i normalperioden 1991–2020.<br><br>
-      <b>Nedbør</b> – seNorge 1×1 km rutenett, oppdatert hvert døgn (og 3t for prognosedelen).<br><br>
-      <b>Stasjon FØRDE PLU</b> (SN57162) – timesmålinger fra MET Frost. Klikk markøren for graf og YR-prognose.
-    </p>
   </div>
 </div>
 
-<!-- ── Map ─────────────────────────────────────────────── -->
+<!-- ── MAP ────────────────────────────────────────────── -->
 <div id="map"></div>
 
-<!-- ── Station panel ───────────────────────────────────── -->
-<div id="station-panel">
-  <div id="panel-head">
-    <div>
-      <div id="panel-name"></div>
-      <div id="panel-id"></div>
-    </div>
-    <span class="close-btn" onclick="closePanel()">×</span>
-  </div>
-
-  <div id="panel-current">
-    <div class="stat-pill">
-      <div class="lbl">Siste time</div>
-      <div class="val" id="stat-1h">–</div>
-      <div class="unit">mm/t</div>
-    </div>
-    <div class="stat-pill">
-      <div class="lbl">Siste 24 t</div>
-      <div class="val" id="stat-24h">–</div>
-      <div class="unit">mm</div>
-    </div>
-    <div class="stat-pill">
-      <div class="lbl">Siste 7 d</div>
-      <div class="val" id="stat-7d">–</div>
-      <div class="unit">mm</div>
+<!-- ── RAPPORT-PANEL ─────────────────────────────────── -->
+<div id="report">
+  <div id="report-head">
+    <h2>Punkt-rapport</h2>
+    <div class="coord-row">
+      <div class="coord-field">
+        <label>Breddegrad (N)</label>
+        <input type="number" id="inp-lat" placeholder="61.4330" step="0.0001" min="57" max="72" />
+      </div>
+      <div class="coord-field">
+        <label>Lengdegrad (Ø)</label>
+        <input type="number" id="inp-lon" placeholder="5.7000" step="0.0001" min="4" max="32" />
+      </div>
+      <button class="gen-btn" onclick="generateReport()">Hent</button>
     </div>
   </div>
 
-  <div class="panel-body">
-    <div class="panel-sub">Nedbør siste 7 dager (mm/t)</div>
-    <canvas id="precip-chart"></canvas>
+  <div id="report-body">
+    <!-- Empty state -->
+    <div id="report-empty">
+      <div class="icon">🗺️</div>
+      <p>Klikk et sted på kartet<br>eller skriv inn koordinater<br>for å generere rapport.</p>
+    </div>
 
-    <div class="panel-sub">Nedbørsprognose neste 48 t (YR)</div>
-    <div id="forecast-bars"></div>
+    <!-- Location -->
+    <div class="r-section" id="r-loc" style="display:none">
+      <h3>Sted</h3>
+      <div id="r-loc-name">–</div>
+      <div id="r-loc-coords">–</div>
+    </div>
+
+    <!-- Vannmetning -->
+    <div class="r-section" id="r-sm" style="display:none">
+      <h3>Vannmetning i jord (ODM/HBV)</h3>
+      <div id="r-sm-body"></div>
+    </div>
+
+    <!-- Nedbørsprognose -->
+    <div class="r-section" id="r-fc" style="display:none">
+      <h3>Nedbørsprognose (YR)</h3>
+      <div class="precip-grid">
+        <div class="precip-cell"><div class="plbl">Neste 1 t</div><div class="pval" id="fc-1h">–</div><div class="punit">mm</div></div>
+        <div class="precip-cell"><div class="plbl">Neste 3 t</div><div class="pval" id="fc-3h">–</div><div class="punit">mm</div></div>
+        <div class="precip-cell"><div class="plbl">Neste 6 t</div><div class="pval" id="fc-6h">–</div><div class="punit">mm</div></div>
+        <div class="precip-cell"><div class="plbl">Neste 24 t</div><div class="pval" id="fc-24h">–</div><div class="punit">mm</div></div>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-lbl">Timesnedbør neste 48 t (mm/t)</div>
+        <canvas id="chart-fc"></canvas>
+      </div>
+    </div>
+
+    <!-- Nedbørshistorikk -->
+    <div class="r-section" id="r-hist" style="display:none">
+      <h3>Nedbørshistorikk – seNorge (siste 7 dager)</h3>
+      <div id="r-hist-total" style="font-size:11px;color:#8b949e;margin-bottom:6px"></div>
+      <canvas id="chart-hist"></canvas>
+    </div>
+
+    <!-- Frost station extras -->
+    <div class="r-section" id="r-frost" style="display:none">
+      <h3>FØRDE PLU (SN57162) – timesmålinger</h3>
+      <div id="r-frost-body"></div>
+    </div>
   </div>
 </div>
 
 <script>
-// ────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────
 //  CONFIG
-// ────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────
 const CLIENT_ID  = 'ff18c1d5-0abc-4af7-bccb-e4e3fe8ff3ad';
 const FROST_AUTH = 'Basic ' + btoa(CLIENT_ID + ':');
-const FROST_BASE = 'https://frost.met.no';
 const SENORGE    = 'https://gis3.nve.no/image/rest/services/seNorgeGrid';
+const GTS        = 'https://gts.nve.no/api/GridTimeSeries';
 
-// Nedbørsstasjon Førde PLU
 const STATION = { id: 'SN57162', name: 'FØRDE PLU', lat: 61.457407, lon: 5.833958 };
 
-// ────────────────────────────────────────────────────────────────────────────
+// Soil moisture color → class mapping (from seNorge legend)
+const SM_COLORS = [
+  { r: 215, g:  48, b:  39, label: '> 90 %',  midPct: 95, color: '#d73027' },
+  { r: 252, g: 141, b:  89, label: '80–90 %', midPct: 85, color: '#fc8d59' },
+  { r: 254, g: 224, b: 139, label: '70–80 %', midPct: 75, color: '#fee08b' },
+  { r: 145, g: 207, b:  96, label: '60–70 %', midPct: 65, color: '#91cf60' },
+  { r:  26, g: 152, b:  80, label: '< 60 %',  midPct: 45, color: '#1a9850' },
+];
+
+// ──────────────────────────────────────────────────────────────────────────
+//  PROJ4 – WGS84 → UTM zone 33N (for gts.nve.no)
+// ──────────────────────────────────────────────────────────────────────────
+proj4.defs('EPSG:32633', '+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs');
+
+function latLonToUTM33(lat, lon) {
+  const [x, y] = proj4('EPSG:4326', 'EPSG:32633', [lon, lat]);
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 //  STATE
-// ────────────────────────────────────────────────────────────────────────────
-let map, smLayer, rrLayer;
-let precipChart = null;
+// ──────────────────────────────────────────────────────────────────────────
+let map, smLayer, rrLayer, clickMarker;
+let chartFc = null, chartHist = null;
 
-// ────────────────────────────────────────────────────────────────────────────
-//  HELPERS
-// ────────────────────────────────────────────────────────────────────────────
-function setStatus(msg, type = '') {
-  const el = document.getElementById('status');
-  el.textContent = msg;
-  el.className   = type;
-}
-
-function todayISO() { return new Date().toISOString().slice(0, 10); }
-
-function isoRange(hoursBack) {
-  const now  = new Date();
-  const from = new Date(now - hoursBack * 3600e3);
-  const fmt  = d => d.toISOString().replace(/\.\d+Z$/, 'Z');
-  return `${fmt(from)}/${fmt(now)}`;
-}
-
-function dateToEpoch(dateStr) {
-  if (!dateStr) return null;
-  return new Date(dateStr + 'T12:00:00Z').getTime();
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-//  ARCGIS IMAGE SERVER TILE LAYER
-// ────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────
+//  ARCGIS IMAGE LAYER (tile-based, EPSG:3857)
+// ──────────────────────────────────────────────────────────────────────────
 const ArcGISImageLayer = L.GridLayer.extend({
-  options: { tileSize: 256, opacity: 0.7, layerName: 'gwb_sssrel', date: null },
-
+  options: { tileSize: 256, opacity: 0.7, layerName: 'odmhbv_ssspct', date: null },
   createTile(coords, done) {
-    const img    = document.createElement('img');
+    const img = document.createElement('img');
     img.crossOrigin = 'anonymous';
-    const bounds = this._tileCoordsToBounds(coords);
-    const sw     = L.CRS.EPSG3857.project(bounds.getSouthWest());
-    const ne     = L.CRS.EPSG3857.project(bounds.getNorthEast());
-    const bbox   = `${sw.x},${sw.y},${ne.x},${ne.y}`;
-    const sz     = this.options.tileSize;
-    let url      = `${SENORGE}/${this.options.layerName}/ImageServer/exportImage`
-                 + `?bbox=${bbox}&bboxSR=3857&size=${sz},${sz}&imageSR=3857`
-                 + `&format=png32&transparent=true&f=image`;
+    const b  = this._tileCoordsToBounds(coords);
+    const sw = L.CRS.EPSG3857.project(b.getSouthWest());
+    const ne = L.CRS.EPSG3857.project(b.getNorthEast());
+    const sz = this.options.tileSize;
+    let url  = `${SENORGE}/${this.options.layerName}/ImageServer/exportImage`
+             + `?bbox=${sw.x},${sw.y},${ne.x},${ne.y}&bboxSR=3857`
+             + `&size=${sz},${sz}&imageSR=3857&format=png32&transparent=true&f=image`;
     if (this.options.date) url += `&time=${this.options.date}`;
-    img.src    = url;
+    img.src = url;
     img.onload  = () => done(null, img);
     img.onerror = e  => done(e, img);
     return img;
   },
 });
 
-function makeArcLayer(layerName, dateEpoch, opacity) {
-  return new ArcGISImageLayer({ layerName, date: dateEpoch, opacity });
+function makeArcLayer(name, dateEpoch, opacity) {
+  return new ArcGISImageLayer({ layerName: name, date: dateEpoch, opacity });
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-//  LAYER CONTROLS
-// ────────────────────────────────────────────────────────────────────────────
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+
+function dateToEpoch(s) {
+  return s ? new Date(s + 'T12:00:00Z').getTime() : null;
+}
+
 function updateSmLayer() {
   if (smLayer) map.removeLayer(smLayer);
-  smLayer = makeArcLayer(
-    'odmhbv_ssspct',
-    dateToEpoch(document.getElementById('sm-date').value),
-    document.getElementById('sm-opacity').value / 100
-  );
+  smLayer = makeArcLayer('odmhbv_ssspct', dateToEpoch(document.getElementById('sm-date').value), document.getElementById('sm-opacity').value / 100);
   if (document.getElementById('toggle-sm').checked) smLayer.addTo(map);
 }
 
 function updateRrLayer() {
   if (rrLayer) map.removeLayer(rrLayer);
-  rrLayer = makeArcLayer(
-    document.getElementById('rr-layer').value,
-    dateToEpoch(document.getElementById('rr-date').value),
-    document.getElementById('rr-opacity').value / 100
-  );
+  rrLayer = makeArcLayer(document.getElementById('rr-layer').value, dateToEpoch(document.getElementById('rr-date').value), document.getElementById('rr-opacity').value / 100);
   if (document.getElementById('toggle-rr').checked) rrLayer.addTo(map);
 }
 
 function toggleLayer(which, on) {
-  const layer = which === 'sm' ? smLayer : rrLayer;
-  if (!layer) return;
-  on ? layer.addTo(map) : map.removeLayer(layer);
+  const l = which === 'sm' ? smLayer : rrLayer;
+  if (!l) return;
+  on ? l.addTo(map) : map.removeLayer(l);
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-//  FROST API
-// ────────────────────────────────────────────────────────────────────────────
-async function frostGet(path) {
-  const r = await fetch(FROST_BASE + path, { headers: { Authorization: FROST_AUTH } });
-  const j = await r.json();
-  if (j.error) throw new Error(j.error.reason || j.error.message);
-  return j;
+// ──────────────────────────────────────────────────────────────────────────
+//  SEMORGE PIXEL VALUE – canvas color extraction
+// ──────────────────────────────────────────────────────────────────────────
+async function getSmPixel(lat, lon) {
+  const d   = 0.008; // ~800m box to ensure we hit a 1km cell
+  const sw  = L.CRS.EPSG3857.project(L.latLng(lat - d, lon - d));
+  const ne  = L.CRS.EPSG3857.project(L.latLng(lat + d, lon + d));
+  const bbox = `${sw.x},${sw.y},${ne.x},${ne.y}`;
+  const epoch = dateToEpoch(document.getElementById('sm-date').value);
+
+  let url = `${SENORGE}/odmhbv_ssspct/ImageServer/exportImage`
+          + `?bbox=${bbox}&bboxSR=3857&size=11,11&imageSR=3857&format=png32&transparent=true&f=image`;
+  if (epoch) url += `&time=${epoch}`;
+
+  const resp = await fetch(url);
+  const blob = await resp.blob();
+  const bmp  = await createImageBitmap(blob);
+
+  const cv   = document.createElement('canvas');
+  cv.width   = 11; cv.height = 11;
+  const ctx  = cv.getContext('2d');
+  ctx.drawImage(bmp, 0, 0);
+  const px   = ctx.getImageData(5, 5, 1, 1).data; // centre pixel
+
+  if (px[3] < 30) return null; // transparent → no data
+
+  // Find nearest colour class
+  let best = null, minD = Infinity;
+  for (const cls of SM_COLORS) {
+    const d = Math.sqrt((px[0]-cls.r)**2 + (px[1]-cls.g)**2 + (px[2]-cls.b)**2);
+    if (d < minD) { minD = d; best = cls; }
+  }
+  return best;
 }
 
-async function fetchPrecipObs(hoursBack) {
-  const path = `/observations/v0.jsonld`
-             + `?sources=${STATION.id}:0`
-             + `&elements=${encodeURIComponent('sum(precipitation_amount PT1H)')}`
-             + `&referencetime=${encodeURIComponent(isoRange(hoursBack))}`
-             + `&timeresolutions=PT1H`;
-  return frostGet(path);
+// ──────────────────────────────────────────────────────────────────────────
+//  GTS.NVE.NO – historical precipitation (UTM grid)
+// ──────────────────────────────────────────────────────────────────────────
+async function getHistPrecip(lat, lon) {
+  const { x, y } = latLonToUTM33(lat, lon);
+  const end   = todayISO();
+  const start = new Date(Date.now() - 7*24*3600e3).toISOString().slice(0, 10);
+  const url   = `${GTS}/${x}/${y}/${start}/${end}/rr.csv`;
+  const resp  = await fetch(url);
+  const text  = await resp.text();
+  if (text.includes('Error') || text.includes('does not exist')) return null;
+
+  const lines = text.trim().split('\n').filter(l => !l.startsWith('#') && l.includes(';'));
+  lines.shift(); // header row
+  return lines.map(l => {
+    const [dateStr, val] = l.split(';');
+    return { date: dateStr.trim(), v: parseFloat(val.trim()) };
+  }).filter(p => !isNaN(p.v));
 }
 
-// ────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────
 //  YR FORECAST
-// ────────────────────────────────────────────────────────────────────────────
-async function fetchForecast(lat, lon) {
+// ──────────────────────────────────────────────────────────────────────────
+async function getForecast(lat, lon) {
   const r = await fetch(
     `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`,
     { headers: { 'User-Agent': 'JordvannApp/1.0 norconsult.com' } }
@@ -381,156 +442,247 @@ async function fetchForecast(lat, lon) {
   return r.json();
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-//  STATION MARKER
-// ────────────────────────────────────────────────────────────────────────────
-function makeStationMarker() {
+// ──────────────────────────────────────────────────────────────────────────
+//  REVERSE GEOCODE (Nominatim)
+// ──────────────────────────────────────────────────────────────────────────
+async function getPlaceName(lat, lon) {
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}&format=json&accept-language=nb`,
+      { headers: { 'User-Agent': 'JordvannApp/1.0' } }
+    );
+    const j = await r.json();
+    return j.address?.village || j.address?.town || j.address?.city || j.address?.municipality || j.display_name?.split(',')[0] || '–';
+  } catch { return '–'; }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  FROST – FØRDE PLU historical
+// ──────────────────────────────────────────────────────────────────────────
+async function getFrostPrecip() {
+  const now  = new Date();
+  const from = new Date(now - 24 * 3600e3);
+  const fmt  = d => d.toISOString().replace(/\.\d+Z$/, 'Z');
+  const path = `/observations/v0.jsonld?sources=${STATION.id}:0`
+             + `&elements=${encodeURIComponent('sum(precipitation_amount PT1H)')}`
+             + `&referencetime=${encodeURIComponent(fmt(from) + '/' + fmt(now))}`
+             + `&timeresolutions=PT1H`;
+  const r = await fetch('https://frost.met.no' + path, { headers: { Authorization: FROST_AUTH } });
+  const j = await r.json();
+  if (j.error) return [];
+  const pts = [];
+  for (const rec of (j.data || []))
+    for (const obs of (rec.observations || []))
+      pts.push({ t: new Date(rec.referenceTime), v: obs.value ?? 0 });
+  return pts.sort((a, b) => a.t - b.t);
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  CHART HELPERS
+// ──────────────────────────────────────────────────────────────────────────
+function destroyCharts() {
+  if (chartFc)   { chartFc.destroy();   chartFc   = null; }
+  if (chartHist) { chartHist.destroy(); chartHist = null; }
+}
+
+function barChart(id, labels, data, color, yLabel) {
+  const ctx = document.getElementById(id).getContext('2d');
+  return new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ data, backgroundColor: color + 'bb', borderColor: color, borderWidth: 1, borderRadius: 2 }],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8b949e', maxTicksLimit: 8, maxRotation: 0, font: { size: 8 } }, grid: { display: false } },
+        y: { ticks: { color: '#8b949e', font: { size: 8 } }, grid: { color: '#21262d' }, min: 0,
+             title: { display: !!yLabel, text: yLabel, color: '#8b949e', font: { size: 8 } } },
+      },
+    },
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  SHOW / HIDE SECTIONS
+// ──────────────────────────────────────────────────────────────────────────
+function showSections(ids) {
+  for (const id of ['r-loc','r-sm','r-fc','r-hist','r-frost'])
+    document.getElementById(id).style.display = ids.includes(id) ? '' : 'none';
+  document.getElementById('report-empty').style.display = ids.length ? 'none' : '';
+}
+
+function setLoading(id, on) {
+  const el = document.getElementById(id);
+  if (on) el.innerHTML = '<span class="spinner"></span>';
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  GENERATE REPORT
+// ──────────────────────────────────────────────────────────────────────────
+async function generateReport(lat, lon) {
+  // Read from inputs if not provided
+  if (lat === undefined) {
+    lat = parseFloat(document.getElementById('inp-lat').value);
+    lon = parseFloat(document.getElementById('inp-lon').value);
+  }
+  if (isNaN(lat) || isNaN(lon)) return;
+
+  // Clamp to Norway-ish range
+  lat = Math.max(57, Math.min(72, lat));
+  lon = Math.max(4,  Math.min(32, lon));
+
+  // Update inputs
+  document.getElementById('inp-lat').value = lat.toFixed(4);
+  document.getElementById('inp-lon').value = lon.toFixed(4);
+
+  // Place crosshair marker
+  if (clickMarker) map.removeLayer(clickMarker);
+  clickMarker = L.marker([lat, lon], {
+    icon: L.divIcon({ className: '', html: '<div class="click-pin"></div>', iconSize: [12,12], iconAnchor: [6,6] }),
+    zIndexOffset: 500,
+  }).addTo(map);
+
+  // Show loading state
+  destroyCharts();
+  showSections(['r-loc','r-sm','r-fc','r-hist']);
+  setLoading('r-sm-body', true);
+  document.getElementById('r-loc-name').textContent   = '…';
+  document.getElementById('r-loc-coords').textContent = `${lat.toFixed(4)}°N  ${lon.toFixed(4)}°Ø`;
+  ['fc-1h','fc-3h','fc-6h','fc-24h'].forEach(id => document.getElementById(id).textContent = '…');
+  document.getElementById('r-hist-total').textContent = '…';
+
+  // Check if near Frost station
+  const distToStation = Math.hypot(lat - STATION.lat, lon - STATION.lon);
+  const nearStation   = distToStation < 0.05; // ~5 km
+
+  if (nearStation) showSections(['r-loc','r-sm','r-fc','r-hist','r-frost']);
+
+  // Run all fetches in parallel
+  const [place, smClass, forecast, hist] = await Promise.allSettled([
+    getPlaceName(lat, lon),
+    getSmPixel(lat, lon),
+    getForecast(lat, lon),
+    getHistPrecip(lat, lon),
+  ]);
+
+  // ── Location ──
+  document.getElementById('r-loc-name').textContent = place.value ?? '–';
+
+  // ── Vannmetning ──
+  const sm = smClass.value;
+  const smBody = document.getElementById('r-sm-body');
+  if (sm) {
+    const pct  = sm.midPct;
+    const date = document.getElementById('sm-date').value || todayISO();
+    smBody.innerHTML = `
+      <div class="sm-value" style="color:${sm.color}">${sm.label}</div>
+      <div class="sm-label" style="color:#8b949e">${sm.label === '> 90 %' ? 'Svært fuktig / mettet' : sm.label === '< 60 %' ? 'Tørt' : 'Moderat–fuktig'}</div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${sm.color}"></div></div>
+      <div class="sm-source">Dato: ${date} · seNorge ODM/HBV 1×1 km</div>`;
+  } else {
+    smBody.innerHTML = '<div style="font-size:11px;color:#8b949e">Ingen data for dette punktet (utenfor modellområde eller hav).</div>';
+  }
+
+  // ── YR Forecast ──
+  const fc = forecast.value;
+  if (fc) {
+    const series = fc.properties?.timeseries || [];
+    const p1h  = series[0]?.data?.next_1_hours?.details?.precipitation_amount ?? 0;
+    const p3h  = series.slice(0, 3).reduce((s, t) => s + (t?.data?.next_1_hours?.details?.precipitation_amount ?? 0), 0);
+    const p6h  = series[0]?.data?.next_6_hours?.details?.precipitation_amount
+              ?? series.slice(0, 6).reduce((s, t) => s + (t?.data?.next_1_hours?.details?.precipitation_amount ?? 0), 0);
+    const p24h = series.slice(0, 24).reduce((s, t) => s + (t?.data?.next_1_hours?.details?.precipitation_amount ?? 0), 0);
+    document.getElementById('fc-1h').textContent  = p1h.toFixed(1);
+    document.getElementById('fc-3h').textContent  = p3h.toFixed(1);
+    document.getElementById('fc-6h').textContent  = p6h.toFixed(1);
+    document.getElementById('fc-24h').textContent = p24h.toFixed(0);
+
+    const fcSeries = series.slice(0, 48);
+    const fcLabels = fcSeries.map(s => {
+      const d = new Date(s.time);
+      return d.toLocaleString('nb-NO', { weekday:'short', hour:'2-digit', minute:'2-digit' });
+    });
+    const fcData   = fcSeries.map(s => s.data?.next_1_hours?.details?.precipitation_amount ?? 0);
+    chartFc = barChart('chart-fc', fcLabels, fcData, '#1d6fa4', 'mm/t');
+  }
+
+  // ── Nedbørshistorikk ──
+  const h = hist.value;
+  if (h && h.length) {
+    const total = h.reduce((s, p) => s + p.v, 0);
+    document.getElementById('r-hist-total').textContent = `Total: ${total.toFixed(1)} mm`;
+    const hLabels = h.map(p => {
+      const parts = p.date.split(' ')[0].split('.');
+      return `${parts[0]}.${parts[1]}`;
+    });
+    chartHist = barChart('chart-hist', hLabels, h.map(p => p.v), '#2171b5', 'mm');
+  } else {
+    document.getElementById('r-hist-total').textContent = 'Ikke tilgjengelig';
+  }
+
+  // ── Frost station ──
+  if (nearStation) {
+    document.getElementById('r-frost').style.display = '';
+    setLoading('r-frost-body', true);
+    try {
+      const frostPts = await getFrostPrecip();
+      const last1h   = frostPts.at(-1)?.v ?? null;
+      const sum24h   = frostPts.reduce((s, p) => s + p.v, 0);
+      document.getElementById('r-frost-body').innerHTML = `
+        <div style="font-size:11px;color:#8b949e;margin-bottom:6px">
+          Siste time: <b style="color:#58a6ff">${last1h !== null ? last1h.toFixed(1) + ' mm' : '–'}</b>
+          &nbsp;·&nbsp; Siste 24 t: <b style="color:#58a6ff">${sum24h.toFixed(1)} mm</b>
+        </div>
+        <div style="font-size:9px;color:#6e7681">Pluviometer – timesmålinger fra MET Frost</div>`;
+    } catch {
+      document.getElementById('r-frost-body').textContent = 'Feil ved lasting av Frost-data';
+    }
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  STATION MARKER (FØRDE PLU)
+// ──────────────────────────────────────────────────────────────────────────
+function addStationMarker() {
   const icon = L.divIcon({
     className: '',
-    html: `<div class="station-dot-wrap">
-             <div class="station-pulse"></div>
-             <div class="station-dot"></div>
-           </div>`,
-    iconSize:   [16, 16],
-    iconAnchor: [8, 8],
-    tooltipAnchor: [8, -8],
+    html: '<div class="st-wrap"><div class="st-pulse"></div><div class="st-dot"></div></div>',
+    iconSize: [16,16], iconAnchor: [8,8], tooltipAnchor: [8,-8],
   });
-
-  const marker = L.marker([STATION.lat, STATION.lon], { icon, zIndexOffset: 1000 });
-  marker.bindTooltip(
-    `<b>${STATION.name}</b><br><span style="color:#8b949e">${STATION.id} · Nedbørsstasjon</span>`,
-    { direction: 'top', offset: [0, -8] }
-  );
-  marker.on('click', openPanel);
-  return marker;
+  const m = L.marker([STATION.lat, STATION.lon], { icon, zIndexOffset: 1000 });
+  m.bindTooltip(`<b>${STATION.name}</b><br>${STATION.id} · Nedbørsstasjon`, { direction: 'top', offset: [0,-8] });
+  m.on('click', () => generateReport(STATION.lat, STATION.lon));
+  m.addTo(map);
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-//  STATION PANEL
-// ────────────────────────────────────────────────────────────────────────────
-async function openPanel() {
-  const panel = document.getElementById('station-panel');
-  panel.style.display = 'block';
-  document.getElementById('panel-name').textContent = STATION.name;
-  document.getElementById('panel-id').textContent   =
-    `${STATION.id} · ${STATION.lat.toFixed(4)}°N ${STATION.lon.toFixed(4)}°Ø · Pluviometer`;
-
-  // Reset
-  ['stat-1h','stat-24h','stat-7d'].forEach(id => document.getElementById(id).textContent = '…');
-  document.getElementById('forecast-bars').innerHTML = '';
-  if (precipChart) { precipChart.destroy(); precipChart = null; }
-
-  // Fetch last 7 days hourly precip
-  try {
-    const data = await fetchPrecipObs(7 * 24);
-    const pts  = [];
-    for (const rec of (data.data || []))
-      for (const obs of (rec.observations || []))
-        pts.push({ t: new Date(rec.referenceTime), v: obs.value ?? 0 });
-    pts.sort((a, b) => a.t - b.t);
-
-    const last1h  = pts.at(-1)?.v ?? 0;
-    const last24h = pts.filter(p => p.t >= new Date(Date.now() - 24*3600e3)).reduce((s,p) => s + p.v, 0);
-    const last7d  = pts.reduce((s, p) => s + p.v, 0);
-
-    document.getElementById('stat-1h').textContent  = last1h.toFixed(1);
-    document.getElementById('stat-24h').textContent = last24h.toFixed(1);
-    document.getElementById('stat-7d').textContent  = last7d.toFixed(0);
-
-    // Chart – bar chart, hourly
-    const ctx = document.getElementById('precip-chart').getContext('2d');
-    precipChart = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels:   pts.map(p => p.t.toLocaleString('nb-NO', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })),
-        datasets: [{
-          data:            pts.map(p => p.v),
-          backgroundColor: 'rgba(29,111,164,0.75)',
-          borderColor:     '#1d6fa4',
-          borderWidth:     1,
-          borderRadius:    2,
-        }],
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: {
-            ticks: { color: '#8b949e', maxTicksLimit: 10, maxRotation: 0 },
-            grid:  { display: false },
-          },
-          y: {
-            ticks: { color: '#8b949e' },
-            grid:  { color: '#21262d' },
-            title: { display: true, text: 'mm/t', color: '#8b949e', font: { size: 10 } },
-            min: 0,
-          },
-        },
-      },
-    });
-  } catch (e) {
-    document.getElementById('stat-1h').textContent = 'Feil';
-    console.error(e);
-  }
-
-  // YR forecast bars
-  try {
-    const fc     = await fetchForecast(STATION.lat, STATION.lon);
-    const series = (fc.properties?.timeseries || []).slice(0, 48);
-    const maxP   = Math.max(...series.map(s => s.data?.next_1_hours?.details?.precipitation_amount || 0), 0.1);
-    document.getElementById('forecast-bars').innerHTML =
-      series.filter((_, i) => i % 2 === 0).map(s => {
-        const p = s.data?.next_1_hours?.details?.precipitation_amount || 0;
-        const t = new Date(s.time).toLocaleString('nb-NO',
-          { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
-        const w = Math.round((p / maxP) * 140);
-        return `<div class="p-row">
-          <span class="p-time">${t}</span>
-          <div class="p-bar" style="width:${Math.max(w, 2)}px"></div>
-          <span class="p-val">${p.toFixed(1)} mm</span>
-        </div>`;
-      }).join('');
-  } catch {
-    document.getElementById('forecast-bars').innerHTML =
-      '<div style="color:#8b949e;font-size:10px">YR-prognose utilgjengelig</div>';
-  }
-}
-
-function closePanel() {
-  document.getElementById('station-panel').style.display = 'none';
-  if (precipChart) { precipChart.destroy(); precipChart = null; }
-}
-
-// ────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────
 //  INIT
-// ────────────────────────────────────────────────────────────────────────────
-async function init() {
-  // Set date inputs to today
+// ──────────────────────────────────────────────────────────────────────────
+function init() {
   const today = todayISO();
   document.getElementById('sm-date').value = today;
   document.getElementById('rr-date').value = today;
 
-  // Heilevang vest for Førde
   map = L.map('map').setView([61.433, 5.700], 12);
 
-  // Basemap – CartoDB Positron (gråtone)
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> bidragsytere, © <a href="https://carto.com/">CARTO</a>',
+    attribution: '© OpenStreetMap, © CARTO',
     subdomains: 'abcd', maxZoom: 19,
   }).addTo(map);
 
-  // Vannmetning WMS
-  smLayer = makeArcLayer('odmhbv_ssspct', dateToEpoch(today), 0.7);
+  smLayer = makeArcLayer('odmhbv_ssspct', dateToEpoch(today), 0.70);
   smLayer.addTo(map);
 
-  // Nedbør WMS (over vannmetning)
   rrLayer = makeArcLayer('rr', dateToEpoch(today), 0.65);
   rrLayer.addTo(map);
 
-  // Precipitation station marker
-  makeStationMarker().addTo(map);
+  addStationMarker();
 
-  setStatus('Klikk stasjonssymbolet for nedbørsdata', 'success');
+  // Click on map → generate report
+  map.on('click', e => generateReport(e.latlng.lat, e.latlng.lng));
 }
 
 init();
