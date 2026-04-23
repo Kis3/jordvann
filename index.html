@@ -301,11 +301,11 @@ const STATION = { id: 'SN57162', name: 'FØRDE PLU', lat: 61.457407, lon: 5.8339
 
 // Soil moisture color → class mapping (from seNorge legend)
 const SM_COLORS = [
-  { r: 215, g:  48, b:  39, label: '> 90 %',  midPct: 95, color: '#d73027' },
-  { r: 252, g: 141, b:  89, label: '80–90 %', midPct: 85, color: '#fc8d59' },
-  { r: 254, g: 224, b: 139, label: '70–80 %', midPct: 75, color: '#fee08b' },
-  { r: 145, g: 207, b:  96, label: '60–70 %', midPct: 65, color: '#91cf60' },
-  { r:  26, g: 152, b:  80, label: '< 60 %',  midPct: 45, color: '#1a9850' },
+  { r: 215, g:  48, b:  39, label: '> 90 %',  desc: 'Mettet',        midPct: 95, color: '#d73027' },
+  { r: 252, g: 141, b:  89, label: '80–90 %', desc: 'Svært fuktig',  midPct: 85, color: '#fc8d59' },
+  { r: 254, g: 224, b: 139, label: '70–80 %', desc: 'Fuktig',        midPct: 75, color: '#fee08b' },
+  { r: 145, g: 207, b:  96, label: '60–70 %', desc: 'Moderat fuktig',midPct: 65, color: '#91cf60' },
+  { r:  26, g: 152, b:  80, label: '< 60 %',  desc: 'Tørt',          midPct: 45, color: '#1a9850' },
 ];
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -400,6 +400,8 @@ async function getSmPixel(lat, lon) {
   const px   = ctx.getImageData(5, 5, 1, 1).data; // centre pixel
 
   if (px[3] < 30) return null; // transparent → no data
+  // White/grey background (water, outside domain) – not a data pixel
+  if (px[0] > 230 && px[1] > 230 && px[2] > 230) return null;
 
   // Find nearest colour class
   let best = null, minD = Infinity;
@@ -407,6 +409,8 @@ async function getSmPixel(lat, lon) {
     const d = Math.sqrt((px[0]-cls.r)**2 + (px[1]-cls.g)**2 + (px[2]-cls.b)**2);
     if (d < minD) { minD = d; best = cls; }
   }
+  // Reject if no class is close enough (shouldn't happen for valid data pixels)
+  if (minD > 80) return null;
   return best;
 }
 
@@ -579,7 +583,7 @@ async function generateReport(lat, lon) {
     const date = document.getElementById('sm-date').value || todayISO();
     smBody.innerHTML = `
       <div class="sm-value" style="color:${sm.color}">${sm.label}</div>
-      <div class="sm-label" style="color:#8b949e">${sm.label === '> 90 %' ? 'Svært fuktig / mettet' : sm.label === '< 60 %' ? 'Tørt' : 'Moderat–fuktig'}</div>
+      <div class="sm-label" style="color:#8b949e">${sm.desc}</div>
       <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${sm.color}"></div></div>
       <div class="sm-source">Dato: ${date} · seNorge ODM/HBV 1×1 km</div>`;
   } else {
