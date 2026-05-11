@@ -41,6 +41,39 @@
     .toggle-row { display: flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 10px; }
     .toggle-row label { margin: 0; color: #c9d1d9; cursor: pointer; }
 
+    /* ── CUSTOM CALENDAR ── */
+    .cal-wrap { position: relative; }
+    .cal-trigger {
+      width: 100%; padding: 5px 8px; font-size: 11px;
+      background: #161b22; color: #c9d1d9;
+      border: 1px solid #30363d; border-radius: 5px;
+      cursor: pointer; text-align: left;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .cal-trigger:hover { border-color: #58a6ff; }
+    .cal-popup {
+      display: none; position: absolute; z-index: 9999;
+      top: calc(100% + 4px); left: 0; width: 220px;
+      background: #1c2128; border: 1px solid #30363d; border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5); padding: 8px; font-size: 11px;
+    }
+    .cal-popup.open { display: block; }
+    .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .cal-header span { font-weight: 600; color: #e6edf3; font-size: 12px; }
+    .cal-nav { background: none; border: none; color: #8b949e; cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; }
+    .cal-nav:hover { background: #30363d; color: #e6edf3; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; }
+    .cal-dow { text-align: center; color: #8b949e; font-size: 9px; padding: 2px 0; }
+    .cal-day {
+      text-align: center; padding: 4px 2px; border-radius: 4px;
+      cursor: pointer; color: #c9d1d9;
+    }
+    .cal-day:hover:not(.cal-disabled):not(.cal-empty) { background: #30363d; }
+    .cal-day.cal-today { font-weight: 700; color: #58a6ff; }
+    .cal-day.cal-selected { background: #1f6feb; color: #fff; font-weight: 700; }
+    .cal-day.cal-disabled { color: #484f58; cursor: default; }
+    .cal-day.cal-empty { cursor: default; }
+
     .legend-grid { display: grid; gap: 3px; }
     .legend-item { display: flex; align-items: center; gap: 6px; font-size: 10px; }
     .legend-box { width: 18px; height: 11px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
@@ -171,7 +204,12 @@
   <div class="card">
     <h2>Vannmetning ODM/HBV</h2>
     <label>Dato</label>
-    <input type="date" id="sm-date" onchange="updateSmLayer()" style="width:100%;box-sizing:border-box" />
+    <div class="cal-wrap" id="cal-wrap-sm">
+      <button class="cal-trigger" id="cal-trigger-sm" type="button">
+        <span id="cal-label-sm">–</span><span>📅</span>
+      </button>
+      <div class="cal-popup" id="cal-popup-sm"></div>
+    </div>
     <label>Gjennomsiktighet</label>
     <input type="range" id="sm-opacity" min="10" max="100" value="25" step="5"
       oninput="smLayer && smLayer.setOpacity(this.value/100)" />
@@ -191,7 +229,12 @@
       <option value="rr3d">3 døgn (mm)</option>
     </select>
     <label>Dato</label>
-    <input type="date" id="rr-date" onchange="updateRrLayer()" style="width:100%;box-sizing:border-box" />
+    <div class="cal-wrap" id="cal-wrap-rr">
+      <button class="cal-trigger" id="cal-trigger-rr" type="button">
+        <span id="cal-label-rr">–</span><span>📅</span>
+      </button>
+      <div class="cal-popup" id="cal-popup-rr"></div>
+    </div>
     <label>Gjennomsiktighet</label>
     <input type="range" id="rr-opacity" min="10" max="100" value="10" step="5"
       oninput="rrLayer && rrLayer.setOpacity(this.value/100)" />
@@ -380,13 +423,13 @@ function dateToEpoch(s) {
 
 function updateSmLayer() {
   if (smLayer) map.removeLayer(smLayer);
-  smLayer = makeArcLayer('odmhbv_ssspct', dateToEpoch(document.getElementById('sm-date').value), document.getElementById('sm-opacity').value / 100);
+  smLayer = makeArcLayer('odmhbv_ssspct', dateToEpoch(calValue('sm')), document.getElementById('sm-opacity').value / 100);
   if (document.getElementById('toggle-sm').checked) smLayer.addTo(map);
 }
 
 function updateRrLayer() {
   if (rrLayer) map.removeLayer(rrLayer);
-  rrLayer = makeArcLayer(document.getElementById('rr-layer').value, dateToEpoch(document.getElementById('rr-date').value), document.getElementById('rr-opacity').value / 100);
+  rrLayer = makeArcLayer(document.getElementById('rr-layer').value, dateToEpoch(calValue('rr')), document.getElementById('rr-opacity').value / 100);
   if (document.getElementById('toggle-rr').checked) rrLayer.addTo(map);
 }
 
@@ -407,7 +450,7 @@ async function getSmPixel(lat, lon) {
   const sw  = L.CRS.EPSG3857.project(L.latLng(lat - d, lon - d));
   const ne  = L.CRS.EPSG3857.project(L.latLng(lat + d, lon + d));
   const bbox  = `${sw.x.toFixed(0)},${sw.y.toFixed(0)},${ne.x.toFixed(0)},${ne.y.toFixed(0)}`;
-  const epoch = dateToEpoch(document.getElementById('sm-date').value);
+  const epoch = dateToEpoch(calValue('sm'));
   const sz    = 256;
 
   let url = `${SENORGE}/odmhbv_ssspct/ImageServer/exportImage`
@@ -608,7 +651,7 @@ async function generateReport(lat, lon) {
   const smBody = document.getElementById('r-sm-body');
   if (sm) {
     const pct  = sm.midPct;
-    const date = document.getElementById('sm-date').value || todayISO();
+    const date = calValue('sm');
     smBody.innerHTML = `
       <div class="sm-value" style="color:${sm.color}">${sm.label}</div>
       <div class="sm-label" style="color:#8b949e">${sm.desc}</div>
@@ -767,18 +810,99 @@ function addStationMarker() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+//  CALENDAR WIDGET
+// ──────────────────────────────────────────────────────────────────────────
+const CAL_MIN_OFFSET = -30; // days relative to today
+const CAL_MAX_OFFSET =   9;
+const DAYS_NB = ['man','tir','ons','tor','fre','lør','søn'];
+const MONTHS_NB = ['januar','februar','mars','april','mai','juni','juli','august','september','oktober','november','desember'];
+
+// calState: { id, value (ISO string), viewYear, viewMonth }
+const calState = {};
+
+function calGetMin() { return new Date(Date.now() + CAL_MIN_OFFSET*24*3600e3); }
+function calGetMax() { return new Date(Date.now() + CAL_MAX_OFFSET*24*3600e3); }
+
+function calRender(id) {
+  const st  = calState[id];
+  const popup = document.getElementById('cal-popup-' + id);
+  const min = calGetMin(), max = calGetMax();
+  const y = st.viewYear, m = st.viewMonth;
+  const firstDay = new Date(y, m, 1).getDay(); // 0=Sun
+  const startOffset = (firstDay === 0 ? 6 : firstDay - 1); // Mon=0
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+
+  let html = `<div class="cal-header">
+    <button class="cal-nav" onclick="calNav('${id}',-1)">‹</button>
+    <span>${MONTHS_NB[m]} ${y}</span>
+    <button class="cal-nav" onclick="calNav('${id}',1)">›</button>
+  </div><div class="cal-grid">`;
+  DAYS_NB.forEach(d => { html += `<div class="cal-dow">${d}</div>`; });
+  for (let i = 0; i < startOffset; i++) html += `<div class="cal-day cal-empty"></div>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(y, m, d);
+    const iso  = date.toISOString().slice(0,10);
+    const today = todayISO();
+    const disabled = date < min || date > max;
+    const selected = iso === st.value;
+    const isToday  = iso === today;
+    let cls = 'cal-day';
+    if (disabled) cls += ' cal-disabled';
+    else if (selected) cls += ' cal-selected';
+    else if (isToday) cls += ' cal-today';
+    const click = disabled ? '' : `onclick="calSelect('${id}','${iso}')"`;
+    html += `<div class="${cls}" ${click}>${d}</div>`;
+  }
+  html += '</div>';
+  popup.innerHTML = html;
+}
+
+function calNav(id, dir) {
+  const st = calState[id];
+  st.viewMonth += dir;
+  if (st.viewMonth > 11) { st.viewMonth = 0;  st.viewYear++; }
+  if (st.viewMonth < 0)  { st.viewMonth = 11; st.viewYear--; }
+  calRender(id);
+}
+
+function calSelect(id, iso) {
+  calState[id].value = iso;
+  document.getElementById('cal-label-' + id).textContent = iso;
+  calClose(id);
+  if (id === 'sm') updateSmLayer();
+  if (id === 'rr') updateRrLayer();
+}
+
+function calOpen(id) {
+  // Close any other open calendars
+  ['sm','rr'].forEach(other => { if (other !== id) calClose(other); });
+  const popup = document.getElementById('cal-popup-' + id);
+  popup.classList.toggle('open');
+}
+function calClose(id) {
+  document.getElementById('cal-popup-' + id)?.classList.remove('open');
+}
+
+function calInit(id, isoValue) {
+  const d = new Date(isoValue);
+  calState[id] = { value: isoValue, viewYear: d.getFullYear(), viewMonth: d.getMonth() };
+  document.getElementById('cal-trigger-' + id).addEventListener('click', e => { e.stopPropagation(); calOpen(id); calRender(id); });
+  document.getElementById('cal-label-' + id).textContent = isoValue;
+}
+
+// Close calendars when clicking outside
+document.addEventListener('click', () => { calClose('sm'); calClose('rr'); });
+
+// Helper: get current selected date for a calendar (replaces input.value reads)
+function calValue(id) { return calState[id]?.value || todayISO(); }
+
+// ──────────────────────────────────────────────────────────────────────────
 //  INIT
 // ──────────────────────────────────────────────────────────────────────────
 function init() {
   const today  = todayISO();
-  const minDate = new Date(Date.now() - 30*24*3600e3).toISOString().slice(0,10);
-  const maxDate = new Date(Date.now() +  9*24*3600e3).toISOString().slice(0,10);
-  ['sm-date','rr-date'].forEach(id => {
-    const el = document.getElementById(id);
-    el.min   = minDate;
-    el.max   = maxDate;
-    el.value = today;
-  });
+  calInit('sm', today);
+  calInit('rr', today);
 
   map = L.map('map').setView([61.4387, 5.5463], 13);
 
