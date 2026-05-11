@@ -82,6 +82,40 @@
     #map { flex: 1; min-width: 0; cursor: crosshair !important; position: relative; }
     #map .leaflet-container { cursor: crosshair !important; }
 
+    /* ── AREALRAPPORT-PANEL ── */
+    #area-panel {
+      width: 300px; flex-shrink: 0;
+      background: #0d1117;
+      border-left: 1px solid #30363d;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    #area-head {
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid #30363d;
+      flex-shrink: 0;
+    }
+    #area-head h2 { font-size: 11px; font-weight: 700; color: #e6edf3;
+                    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+    #area-head .area-dato { font-size: 10px; color: #8b949e; }
+    #area-body { flex: 1; overflow-y: auto; padding: 12px 14px; }
+
+    .area-section { margin-bottom: 14px; }
+    .area-section h3 { font-size: 10px; font-weight: 600; color: #8b949e;
+                       text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+
+    /* Klasse-bar */
+    .kls-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; font-size: 10px; }
+    .kls-swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+    .kls-label { width: 72px; flex-shrink: 0; color: #c9d1d9; }
+    .kls-bar-wrap { flex: 1; background: #21262d; border-radius: 3px; height: 10px; overflow: hidden; }
+    .kls-bar { height: 100%; border-radius: 3px; transition: width 0.4s; }
+    .kls-pct { width: 32px; text-align: right; color: #8b949e; flex-shrink: 0; }
+
+    .areal-varsel { border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; font-size: 10px; }
+    .areal-varsel .av-status { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+    .areal-varsel .av-meta { color: #c9d1d9; line-height: 1.5; }
+
     /* ── REPORT PANEL ── */
     #report {
       width: 340px; flex-shrink: 0;
@@ -301,6 +335,35 @@
   </div>
 </div>
 
+<!-- ── AREALRAPPORT-PANEL ────────────────────────────── -->
+<div id="area-panel">
+  <div id="area-head">
+    <h2>Arealrapport – Fv609 Heilevang</h2>
+    <div class="area-dato" id="area-dato-lbl">Laster …</div>
+  </div>
+  <div id="area-body">
+    <div id="area-loading" style="display:flex;align-items:center;gap:8px;padding:20px 0;color:#8b949e;font-size:11px">
+      <span class="spinner" style="width:18px;height:18px;border-width:2px"></span> Henter arealdata …
+    </div>
+    <div id="area-content" style="display:none">
+
+      <!-- Varslingsstatus areal -->
+      <div class="area-section">
+        <h3>Varslingsstatus</h3>
+        <div id="area-varsel"></div>
+      </div>
+
+      <!-- Fordeling vannmetning -->
+      <div class="area-section">
+        <h3>Vannmetning – fordeling av areal</h3>
+        <div id="area-bars"></div>
+        <div style="font-size:9px;color:#484f58;margin-top:6px" id="area-kilde"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ── RAPPORT-PANEL ─────────────────────────────────── -->
 <div id="report">
   <div id="report-head">
@@ -456,6 +519,7 @@ function updateSmLayer() {
   if (smLayer) map.removeLayer(smLayer);
   smLayer = makeArcLayer('odmhbv_ssspct', dateToEpoch(calValue('sm')), document.getElementById('sm-opacity').value / 100);
   if (document.getElementById('toggle-sm').checked) smLayer.addTo(map);
+  lastArealrapport(); // oppdater arealrapport ved ny dato
 }
 
 function updateRrLayer() {
@@ -670,6 +734,123 @@ function renderAlert(sm, p1h, p24h) {
     <div style="font-size:9px;color:#484f58;margin-top:3px">
       Scenario 1 (≥70 %): 10 mm/t, 40 mm/d &nbsp;|&nbsp; Scenario 2 (&lt;70 %): 15 mm/t, 60 mm/d
     </div>`;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  AREALRAPPORT – vannmetningsfordeling over Fv609-rektangelet
+// ──────────────────────────────────────────────────────────────────────────
+async function getAreaSm() {
+  // Konverter AREA_RECT-grenser til EPSG:3857
+  const nv = AREA_RECT.bounds[0], so = AREA_RECT.bounds[1];
+  const sw = L.CRS.EPSG3857.project(L.latLng(so[0], nv[1])); // sørvest
+  const ne = L.CRS.EPSG3857.project(L.latLng(nv[0], so[1])); // nordøst
+  const bbox  = `${sw.x.toFixed(0)},${sw.y.toFixed(0)},${ne.x.toFixed(0)},${ne.y.toFixed(0)}`;
+  const epoch = dateToEpoch(calValue('sm'));
+  const sz    = 128;
+
+  let url = `${SENORGE}/odmhbv_ssspct/ImageServer/exportImage`
+          + `?bbox=${bbox}&bboxSR=3857&size=${sz},${sz}&imageSR=3857`
+          + `&format=png32&transparent=true&f=image`;
+  if (epoch) url += `&time=${epoch}`;
+
+  const resp = await fetch(url);
+  const blob = await resp.blob();
+  const bmp  = await createImageBitmap(blob);
+
+  const cv  = document.createElement('canvas');
+  cv.width  = sz; cv.height = sz;
+  cv.getContext('2d').drawImage(bmp, 0, 0);
+  const data = cv.getContext('2d').getImageData(0, 0, sz, sz).data;
+
+  // Tell piksler per klasse
+  const counts = Object.fromEntries(SM_COLORS.map(c => [c.label, 0]));
+  let noData = 0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+    if (a < 30 || (r < 15 && g < 15 && b < 15)) { noData++; continue; }
+
+    let best = null, minD = Infinity;
+    for (const cls of SM_COLORS) {
+      const d = Math.sqrt((r-cls.r)**2 + (g-cls.g)**2 + (b-cls.b)**2);
+      if (d < minD) { minD = d; best = cls; }
+    }
+    if (best && minD < 120) counts[best.label]++;
+    else noData++;
+  }
+
+  const dataPx = Object.values(counts).reduce((s, v) => s + v, 0);
+  return { counts, dataPx, total: sz * sz };
+}
+
+async function lastArealrapport() {
+  document.getElementById('area-loading').style.display  = 'flex';
+  document.getElementById('area-content').style.display  = 'none';
+
+  const dato = calValue('sm');
+  document.getElementById('area-dato-lbl').textContent = `Dato: ${dato} · seNorge ODM/HBV 1×1 km`;
+
+  try {
+    const { counts, dataPx } = await getAreaSm();
+
+    // Finn dominerende klasse (ekskluder grå "Under 60%" for varslingsnivå)
+    const fuktige = SM_COLORS.filter(c => c.midPct >= 70);
+    const fuktigPx = fuktige.reduce((s, c) => s + (counts[c.label] || 0), 0);
+    const fuktigPct = dataPx > 0 ? fuktigPx / dataPx * 100 : 0;
+
+    // Dominerende klasse totalt
+    let domKls = null, domAnt = 0;
+    for (const cls of SM_COLORS) {
+      if ((counts[cls.label] || 0) > domAnt) { domAnt = counts[cls.label]; domKls = cls; }
+    }
+
+    // Varslingsstatus basert på areal
+    const sc = domKls ? getScenario(domKls) : null;
+    let varselHtml = '';
+    if (sc && fuktigPct > 5) {
+      const bg = fuktigPct > 30 ? '#3d0f0f' : '#2d2500';
+      const fc = fuktigPct > 30 ? '#ff6b6b' : '#f5c000';
+      const ik = fuktigPct > 30 ? '🔴' : '🟡';
+      varselHtml = `
+        <div class="areal-varsel" style="background:${bg}">
+          <div class="av-status" style="color:${fc}">${ik} ${fuktigPct.toFixed(0)} % av arealet ≥ 70 % fuktig</div>
+          <div class="av-meta">Scenario ${sc.no} aktivt · Terskel ${sc.threshH} mm/t · ${sc.threshD} mm/d</div>
+        </div>`;
+    } else {
+      varselHtml = `
+        <div class="areal-varsel" style="background:#0d2818">
+          <div class="av-status" style="color:#40c463">🟢 Under terskel</div>
+          <div class="av-meta">${fuktigPct.toFixed(0)} % av arealet ≥ 70 % fuktig</div>
+        </div>`;
+    }
+    document.getElementById('area-varsel').innerHTML = varselHtml;
+
+    // Søylediagram
+    let barsHtml = '';
+    for (const cls of SM_COLORS) {
+      const n   = counts[cls.label] || 0;
+      const pct = dataPx > 0 ? n / dataPx * 100 : 0;
+      barsHtml += `
+        <div class="kls-row">
+          <div class="kls-swatch" style="background:${cls.color}"></div>
+          <div class="kls-label">${cls.label}</div>
+          <div class="kls-bar-wrap">
+            <div class="kls-bar" style="width:${pct.toFixed(1)}%;background:${cls.color}"></div>
+          </div>
+          <div class="kls-pct">${pct.toFixed(0)} %</div>
+        </div>`;
+    }
+    document.getElementById('area-bars').innerHTML = barsHtml;
+    document.getElementById('area-kilde').textContent =
+      `${dataPx} datapiksel analysert · Fv609 Heilevang (${AREA_RECT.bounds[0][0]}–${AREA_RECT.bounds[1][0]}°N)`;
+
+    document.getElementById('area-loading').style.display = 'none';
+    document.getElementById('area-content').style.display = 'block';
+
+  } catch(e) {
+    document.getElementById('area-loading').innerHTML =
+      `<span style="color:#ff6b6b;font-size:10px">Feil ved henting av arealdata</span>`;
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -1025,7 +1206,10 @@ function init() {
   // Click on map → generate report
   map.on('click', e => generateReport(e.latlng.lat, e.latlng.lng));
 
-  // Default report on page load
+  // Last arealrapport ved oppstart
+  lastArealrapport();
+
+  // Default punktrapport ved oppstart
   generateReport(61.4387, 5.5463);
 }
 
