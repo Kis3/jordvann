@@ -355,7 +355,7 @@
 
       <!-- Fordeling vannmetning -->
       <div class="area-section">
-        <h3>Vannmetning – fordeling av areal</h3>
+        <h3>Vannmetning – fordeling av landareal</h3>
         <div id="area-bars"></div>
         <div style="font-size:9px;color:#484f58;margin-top:6px" id="area-kilde"></div>
       </div>
@@ -813,14 +813,14 @@ async function lastArealrapport() {
       const ik = fuktigPct > 30 ? '🔴' : '🟡';
       varselHtml = `
         <div class="areal-varsel" style="background:${bg}">
-          <div class="av-status" style="color:${fc}">${ik} ${fuktigPct.toFixed(0)} % av arealet ≥ 70 % fuktig</div>
+          <div class="av-status" style="color:${fc}">${ik} ${fuktigPct.toFixed(0)} % av landarealet ≥ 70 % fuktig</div>
           <div class="av-meta">Scenario ${sc.no} aktivt · Terskel ${sc.threshH} mm/t · ${sc.threshD} mm/d</div>
         </div>`;
     } else {
       varselHtml = `
         <div class="areal-varsel" style="background:#0d2818">
           <div class="av-status" style="color:#40c463">🟢 Under terskel</div>
-          <div class="av-meta">${fuktigPct.toFixed(0)} % av arealet ≥ 70 % fuktig</div>
+          <div class="av-meta">${fuktigPct.toFixed(0)} % av landarealet ≥ 70 % fuktig</div>
         </div>`;
     }
     document.getElementById('area-varsel').innerHTML = varselHtml;
@@ -841,8 +841,9 @@ async function lastArealrapport() {
         </div>`;
     }
     document.getElementById('area-bars').innerHTML = barsHtml;
+    const dekning = total > 0 ? (dataPx / total * 100).toFixed(0) : 0;
     document.getElementById('area-kilde').textContent =
-      `${dataPx} datapiksel analysert · Fv609 Heilevang (${AREA_RECT.bounds[0][0]}–${AREA_RECT.bounds[1][0]}°N)`;
+      `Av kartlagt landareal (${dekning} % av rektangelet) · ${dataPx} piksler · Vann/fjell telt ut`;
 
     document.getElementById('area-loading').style.display = 'none';
     document.getElementById('area-content').style.display = 'block';
