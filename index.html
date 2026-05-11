@@ -205,9 +205,11 @@
   <div class="card">
     <h2>Tegnforklaring – vannmetning %</h2>
     <div class="legend-grid">
-      <div class="legend-item"><div class="legend-box" style="background:#f8c400"></div>&gt; 80 % – Svært fuktig / mettet</div>
-      <div class="legend-item"><div class="legend-box" style="background:#f8fc00"></div>70–80 % – Fuktig</div>
-      <div class="legend-item"><div class="legend-box" style="background:#28d460"></div>&lt; 70 % – Moderat / tørt</div>
+      <div class="legend-item"><div class="legend-box" style="background:#cc0000"></div>Over 90 % – Mettet</div>
+      <div class="legend-item"><div class="legend-box" style="background:#e07820"></div>80–90 % – Svært fuktig</div>
+      <div class="legend-item"><div class="legend-box" style="background:#f5c000"></div>70–80 % – Fuktig</div>
+      <div class="legend-item"><div class="legend-box" style="background:#91cf60"></div>60–70 % – Moderat fuktig</div>
+      <div class="legend-item"><div class="legend-box" style="background:#d0d0d0;border-color:#aaa"></div>Under 60 % – Tørt</div>
     </div>
   </div>
 
@@ -314,13 +316,17 @@ const GTS        = 'https://gts.nve.no/api/GridTimeSeries';
 
 const STATION = { id: 'SN57162', name: 'FØRDE PLU', lat: 61.457407, lon: 5.833958 };
 
-// Soil moisture color → class mapping (sampled from actual seNorge pixel output)
-// Background: (229,229,229) grey = no data (alpha=255, NOT transparent)
-const SM_BG = { r: 229, g: 229, b: 229 }; // no-data grey
+// Soil moisture color → class mapping
+// API pixel colors sampled directly from seNorge ImageServer output.
+// Display colors match the seNorge portal legend (red→orange→yellow→lime→grey).
+// (229,229,229) grey = valid "Under 60%" data class (alpha=255, NOT transparent)
+// (1,1,1) near-black = ocean / outside model domain → treated as no-data
 const SM_COLORS = [
-  { r: 248, g: 196, b:   0, label: '> 80 %',  desc: 'Svært fuktig / mettet', midPct: 90, color: '#f8c400' },
-  { r: 248, g: 252, b:   0, label: '70–80 %', desc: 'Fuktig',                midPct: 75, color: '#f8fc00' },
-  { r:  40, g: 212, b:  96, label: '< 70 %',  desc: 'Moderat / tørt',        midPct: 55, color: '#28d460' },
+  { r: 204, g:   0, b:   0, label: 'Over 90 %',  desc: 'Mettet',        midPct: 95, color: '#cc0000' }, // red – rarely observed
+  { r: 248, g: 196, b:   0, label: '80–90 %',    desc: 'Svært fuktig',  midPct: 85, color: '#e07820' }, // amber
+  { r: 248, g: 252, b:   0, label: '70–80 %',    desc: 'Fuktig',        midPct: 75, color: '#f5c000' }, // yellow
+  { r:  40, g: 212, b:  96, label: '60–70 %',    desc: 'Moderat fuktig',midPct: 65, color: '#91cf60' }, // green
+  { r: 229, g: 229, b: 229, label: 'Under 60 %', desc: 'Tørt',          midPct: 30, color: '#d0d0d0' }, // grey
 ];
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -419,11 +425,9 @@ async function getSmPixel(lat, lon) {
   const c   = Math.floor(sz / 2);
   const px  = ctx.getImageData(c, c, 1, 1).data; // centre pixel
 
-  // Transparent → no data
+  // Transparent → outside Norway domain
   if (px[3] < 30) return null;
-  // seNorge no-data background is grey (229,229,229) with full alpha – reject it
-  if (Math.abs(px[0] - SM_BG.r) < 20 && Math.abs(px[1] - SM_BG.g) < 20 && Math.abs(px[2] - SM_BG.b) < 20) return null;
-  // Near-black pixels = ocean / outside Norway
+  // Near-black (1,1,1) = ocean / fjords / outside model domain
   if (px[0] < 15 && px[1] < 15 && px[2] < 15) return null;
 
   // Find nearest colour class
