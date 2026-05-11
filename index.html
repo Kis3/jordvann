@@ -171,7 +171,7 @@
   <div class="card">
     <h2>Vannmetning ODM/HBV</h2>
     <label>Dato</label>
-    <input type="date" id="sm-date" onchange="updateSmLayer()" />
+    <input type="date" id="sm-date" onchange="updateSmLayer()" style="width:100%;box-sizing:border-box" />
     <label>Gjennomsiktighet</label>
     <input type="range" id="sm-opacity" min="10" max="100" value="25" step="5"
       oninput="smLayer && smLayer.setOpacity(this.value/100)" />
@@ -191,7 +191,7 @@
       <option value="rr3d">3 døgn (mm)</option>
     </select>
     <label>Dato</label>
-    <input type="date" id="rr-date" onchange="updateRrLayer()" />
+    <input type="date" id="rr-date" onchange="updateRrLayer()" style="width:100%;box-sizing:border-box" />
     <label>Gjennomsiktighet</label>
     <input type="range" id="rr-opacity" min="10" max="100" value="10" step="5"
       oninput="rrLayer && rrLayer.setOpacity(this.value/100)" />
@@ -770,9 +770,15 @@ function addStationMarker() {
 //  INIT
 // ──────────────────────────────────────────────────────────────────────────
 function init() {
-  const today = todayISO();
-  document.getElementById('sm-date').value = today;
-  document.getElementById('rr-date').value = today;
+  const today  = todayISO();
+  const minDate = new Date(Date.now() - 30*24*3600e3).toISOString().slice(0,10);
+  const maxDate = new Date(Date.now() +  9*24*3600e3).toISOString().slice(0,10);
+  ['sm-date','rr-date'].forEach(id => {
+    const el = document.getElementById(id);
+    el.min   = minDate;
+    el.max   = maxDate;
+    el.value = today;
+  });
 
   map = L.map('map').setView([61.4387, 5.5463], 13);
 
