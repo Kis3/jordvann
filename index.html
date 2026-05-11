@@ -205,11 +205,9 @@
   <div class="card">
     <h2>Tegnforklaring – vannmetning %</h2>
     <div class="legend-grid">
-      <div class="legend-item"><div class="legend-box" style="background:#d73027"></div>&gt; 90 % – Mettet</div>
-      <div class="legend-item"><div class="legend-box" style="background:#fc8d59"></div>80–90 %</div>
-      <div class="legend-item"><div class="legend-box" style="background:#fee08b"></div>70–80 %</div>
-      <div class="legend-item"><div class="legend-box" style="background:#91cf60"></div>60–70 %</div>
-      <div class="legend-item"><div class="legend-box" style="background:#1a9850"></div>&lt; 60 % – Tørt</div>
+      <div class="legend-item"><div class="legend-box" style="background:#f8c400"></div>&gt; 80 % – Svært fuktig / mettet</div>
+      <div class="legend-item"><div class="legend-box" style="background:#f8fc00"></div>70–80 % – Fuktig</div>
+      <div class="legend-item"><div class="legend-box" style="background:#28d460"></div>&lt; 70 % – Moderat / tørt</div>
     </div>
   </div>
 
@@ -316,13 +314,13 @@ const GTS        = 'https://gts.nve.no/api/GridTimeSeries';
 
 const STATION = { id: 'SN57162', name: 'FØRDE PLU', lat: 61.457407, lon: 5.833958 };
 
-// Soil moisture color → class mapping (from seNorge legend)
+// Soil moisture color → class mapping (sampled from actual seNorge pixel output)
+// Background: (229,229,229) grey = no data (alpha=255, NOT transparent)
+const SM_BG = { r: 229, g: 229, b: 229 }; // no-data grey
 const SM_COLORS = [
-  { r: 215, g:  48, b:  39, label: '> 90 %',  desc: 'Mettet',        midPct: 95, color: '#d73027' },
-  { r: 252, g: 141, b:  89, label: '80–90 %', desc: 'Svært fuktig',  midPct: 85, color: '#fc8d59' },
-  { r: 254, g: 224, b: 139, label: '70–80 %', desc: 'Fuktig',        midPct: 75, color: '#fee08b' },
-  { r: 145, g: 207, b:  96, label: '60–70 %', desc: 'Moderat fuktig',midPct: 65, color: '#91cf60' },
-  { r:  26, g: 152, b:  80, label: '< 60 %',  desc: 'Tørt',          midPct: 45, color: '#1a9850' },
+  { r: 248, g: 196, b:   0, label: '> 80 %',  desc: 'Svært fuktig / mettet', midPct: 90, color: '#f8c400' },
+  { r: 248, g: 252, b:   0, label: '70–80 %', desc: 'Fuktig',                midPct: 75, color: '#f8fc00' },
+  { r:  40, g: 212, b:  96, label: '< 70 %',  desc: 'Moderat / tørt',        midPct: 55, color: '#28d460' },
 ];
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -396,38 +394,45 @@ function toggleLayer(which, on) {
 //  SEMORGE PIXEL VALUE – canvas color extraction
 // ──────────────────────────────────────────────────────────────────────────
 async function getSmPixel(lat, lon) {
-  const d   = 0.008; // ~800m box to ensure we hit a 1km cell
+  // seNorge ImageServer needs a large bbox (≥ ~50 km) to render at its minimum scale.
+  // We use d=0.5° and a 256×256 image so the centre pixel accurately represents
+  // the clicked 1 km grid cell.
+  const d   = 0.5;
   const sw  = L.CRS.EPSG3857.project(L.latLng(lat - d, lon - d));
   const ne  = L.CRS.EPSG3857.project(L.latLng(lat + d, lon + d));
-  const bbox = `${sw.x},${sw.y},${ne.x},${ne.y}`;
+  const bbox  = `${sw.x.toFixed(0)},${sw.y.toFixed(0)},${ne.x.toFixed(0)},${ne.y.toFixed(0)}`;
   const epoch = dateToEpoch(document.getElementById('sm-date').value);
+  const sz    = 256;
 
   let url = `${SENORGE}/odmhbv_ssspct/ImageServer/exportImage`
-          + `?bbox=${bbox}&bboxSR=3857&size=11,11&imageSR=3857&format=png32&transparent=true&f=image`;
+          + `?bbox=${bbox}&bboxSR=3857&size=${sz},${sz}&imageSR=3857&format=png32&transparent=true&f=image`;
   if (epoch) url += `&time=${epoch}`;
 
   const resp = await fetch(url);
   const blob = await resp.blob();
   const bmp  = await createImageBitmap(blob);
 
-  const cv   = document.createElement('canvas');
-  cv.width   = 11; cv.height = 11;
-  const ctx  = cv.getContext('2d');
+  const cv  = document.createElement('canvas');
+  cv.width  = sz; cv.height = sz;
+  const ctx = cv.getContext('2d');
   ctx.drawImage(bmp, 0, 0);
-  const px   = ctx.getImageData(5, 5, 1, 1).data; // centre pixel
+  const c   = Math.floor(sz / 2);
+  const px  = ctx.getImageData(c, c, 1, 1).data; // centre pixel
 
-  if (px[3] < 30) return null; // transparent → no data
-  // White/grey background (water, outside domain) – not a data pixel
-  if (px[0] > 230 && px[1] > 230 && px[2] > 230) return null;
+  // Transparent → no data
+  if (px[3] < 30) return null;
+  // seNorge no-data background is grey (229,229,229) with full alpha – reject it
+  if (Math.abs(px[0] - SM_BG.r) < 20 && Math.abs(px[1] - SM_BG.g) < 20 && Math.abs(px[2] - SM_BG.b) < 20) return null;
+  // Near-black pixels = ocean / outside Norway
+  if (px[0] < 15 && px[1] < 15 && px[2] < 15) return null;
 
   // Find nearest colour class
   let best = null, minD = Infinity;
   for (const cls of SM_COLORS) {
-    const d = Math.sqrt((px[0]-cls.r)**2 + (px[1]-cls.g)**2 + (px[2]-cls.b)**2);
-    if (d < minD) { minD = d; best = cls; }
+    const dist = Math.sqrt((px[0]-cls.r)**2 + (px[1]-cls.g)**2 + (px[2]-cls.b)**2);
+    if (dist < minD) { minD = dist; best = cls; }
   }
-  // Reject if no class is close enough (shouldn't happen for valid data pixels)
-  if (minD > 80) return null;
+  if (minD > 120) return null; // unrecognised colour
   return best;
 }
 
