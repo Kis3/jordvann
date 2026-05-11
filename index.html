@@ -244,6 +244,16 @@
     </div>
   </div>
 
+  <!-- Overvåkningsområde -->
+  <div class="card">
+    <h2>Overvåkningsområde</h2>
+    <div class="toggle-row">
+      <input type="checkbox" id="toggle-area" checked
+        onchange="areaRect && (this.checked ? areaRect.addTo(map) : map.removeLayer(areaRect))" />
+      <label for="toggle-area">Vis Fv609-område</label>
+    </div>
+  </div>
+
   <!-- Legends -->
   <div class="card">
     <h2>Tegnforklaring – vannmetning %</h2>
@@ -357,7 +367,13 @@ const FROST_AUTH = 'Basic ' + btoa(CLIENT_ID + ':');
 const SENORGE    = 'https://gis3.nve.no/image/rest/services/seNorgeGrid';
 const GTS        = 'https://gts.nve.no/api/GridTimeSeries';
 
-const STATION = { id: 'SN57162', name: 'FØRDE PLU', lat: 61.457407, lon: 5.833958 };
+const STATION   = { id: 'SN57162', name: 'FØRDE PLU', lat: 61.457407, lon: 5.833958 };
+
+// Overvåkningsområde – juster koordinatene her om nødvendig
+const AREA_RECT = {
+  bounds: [[61.455, 5.440], [61.420, 5.650]], // [NV, SØ]
+  label:  'Overvåkningsområde Fv609 Heilevang',
+};
 
 // Soil moisture color → class mapping
 // API pixel colors sampled directly from seNorge ImageServer output.
@@ -385,7 +401,7 @@ function latLonToUTM33(lat, lon) {
 // ──────────────────────────────────────────────────────────────────────────
 //  STATE
 // ──────────────────────────────────────────────────────────────────────────
-let map, smLayer, rrLayer, clickMarker;
+let map, smLayer, rrLayer, clickMarker, areaRect;
 let chartFc = null, chartHist = null, chartFrost = null;
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -920,6 +936,12 @@ function init() {
   rrLayer.setOpacity(0.10);
 
   addStationMarker();
+
+  // Overvåkningsområde-rektangel
+  areaRect = L.rectangle(AREA_RECT.bounds, {
+    color: '#e94560', weight: 2, fillOpacity: 0, dashArray: '6 4',
+  }).addTo(map);
+  areaRect.bindTooltip(AREA_RECT.label, { sticky: true });
 
   // Click on map → generate report
   map.on('click', e => generateReport(e.latlng.lat, e.latlng.lng));
