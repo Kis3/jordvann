@@ -173,7 +173,7 @@
     <label>Dato</label>
     <input type="date" id="sm-date" onchange="updateSmLayer()" />
     <label>Gjennomsiktighet</label>
-    <input type="range" id="sm-opacity" min="10" max="100" value="10" step="5"
+    <input type="range" id="sm-opacity" min="10" max="100" value="25" step="5"
       oninput="smLayer && smLayer.setOpacity(this.value/100)" />
     <div class="toggle-row">
       <input type="checkbox" id="toggle-sm" checked onchange="toggleLayer('sm',this.checked)" />
@@ -781,9 +781,9 @@ function init() {
     subdomains: 'abcd', maxZoom: 19,
   }).addTo(map);
 
-  smLayer = makeArcLayer('odmhbv_ssspct', dateToEpoch(today), 0.10);
+  smLayer = makeArcLayer('odmhbv_ssspct', dateToEpoch(today), 0.25);
   smLayer.addTo(map);
-  smLayer.setOpacity(0.10);
+  smLayer.setOpacity(0.25);
 
   rrLayer = makeArcLayer('rr', dateToEpoch(today), 0.10);
   rrLayer.addTo(map);
