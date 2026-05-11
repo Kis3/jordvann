@@ -353,6 +353,13 @@
         <div id="area-varsel"></div>
       </div>
 
+      <!-- Kartutsnitt – rent vannmetningslag -->
+      <div class="area-section">
+        <h3>Kartutsnitt – kun vannmetningslag</h3>
+        <img id="area-img" src="" alt="Vannmetning Fv609"
+             style="width:100%;border-radius:6px;image-rendering:pixelated;border:1px solid #30363d" />
+      </div>
+
       <!-- Fordeling vannmetning -->
       <div class="area-section">
         <h3>Vannmetning – fordeling av landareal</h3>
@@ -746,7 +753,7 @@ async function getAreaSm() {
   const ne = L.CRS.EPSG3857.project(L.latLng(nv[0], so[1])); // nordøst
   const bbox  = `${sw.x.toFixed(0)},${sw.y.toFixed(0)},${ne.x.toFixed(0)},${ne.y.toFixed(0)}`;
   const epoch = dateToEpoch(calValue('sm'));
-  const sz    = 128;
+  const sz    = 256; // høyere oppløsning for bedre statistikk og visning
 
   let url = `${SENORGE}/odmhbv_ssspct/ImageServer/exportImage`
           + `?bbox=${bbox}&bboxSR=3857&size=${sz},${sz}&imageSR=3857`
@@ -755,8 +762,11 @@ async function getAreaSm() {
 
   const resp = await fetch(url);
   const blob = await resp.blob();
-  const bmp  = await createImageBitmap(blob);
 
+  // Lag blob-URL for direkte visning (rent lag, ingen bakgrunnskart)
+  const imgUrl = URL.createObjectURL(blob);
+
+  const bmp  = await createImageBitmap(blob);
   const cv  = document.createElement('canvas');
   cv.width  = sz; cv.height = sz;
   cv.getContext('2d').drawImage(bmp, 0, 0);
@@ -780,7 +790,7 @@ async function getAreaSm() {
   }
 
   const dataPx = Object.values(counts).reduce((s, v) => s + v, 0);
-  return { counts, dataPx, total: sz * sz };
+  return { counts, dataPx, total: sz * sz, imgUrl };
 }
 
 async function lastArealrapport() {
@@ -791,7 +801,13 @@ async function lastArealrapport() {
   document.getElementById('area-dato-lbl').textContent = `Dato: ${dato} · seNorge ODM/HBV 1×1 km`;
 
   try {
-    const { counts, dataPx } = await getAreaSm();
+    const { counts, dataPx, total, imgUrl } = await getAreaSm();
+
+    // Vis rent kartutsnitt (kun vannmetningslag, hvit bakgrunn)
+    const imgEl = document.getElementById('area-img');
+    if (imgEl._prevUrl) URL.revokeObjectURL(imgEl._prevUrl);
+    imgEl._prevUrl = imgUrl;
+    imgEl.src = imgUrl;
 
     // Finn dominerende klasse (ekskluder grå "Under 60%" for varslingsnivå)
     const fuktige = SM_COLORS.filter(c => c.midPct >= 70);
