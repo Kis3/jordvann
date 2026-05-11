@@ -144,13 +144,19 @@
     .progress-fill  { height: 100%; border-radius: 4px; transition: width 0.4s; }
     .sm-source { font-size: 9px; color: #6e7681; margin-top: 4px; }
 
+    /* Alert box */
+    .alert-box { border-radius: 6px; padding: 10px 12px; margin-bottom: 2px; }
+    .alert-status { font-size: 13px; font-weight: 700; margin-bottom: 5px; }
+    .alert-meta { font-size: 10px; color: #c9d1d9; line-height: 1.6; }
+    .alert-warn { font-size: 10px; font-weight: 600; margin-top: 5px; }
+
     /* Precip forecast grid */
-    .precip-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .precip-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
     .precip-cell {
       background: #161b22; border: 1px solid #30363d; border-radius: 6px;
       padding: 7px 5px; text-align: center;
     }
-    .precip-cell .pval { font-size: 16px; font-weight: 700; color: #58a6ff; }
+    .precip-cell .pval { font-size: 22px; font-weight: 700; color: #58a6ff; }
     .precip-cell .punit { font-size: 9px; color: #8b949e; }
     .precip-cell .plbl { font-size: 9px; color: #8b949e; margin-bottom: 3px; }
 
@@ -326,6 +332,12 @@
       <div id="r-loc-coords">–</div>
     </div>
 
+    <!-- Varslingsstatus -->
+    <div class="r-section" id="r-alert" style="display:none">
+      <h3>Varslingsstatus</h3>
+      <div id="r-alert-body"></div>
+    </div>
+
     <!-- Vannmetning -->
     <div class="r-section" id="r-sm" style="display:none">
       <h3>Vannmetning i jord (ODM/HBV)</h3>
@@ -336,9 +348,7 @@
     <div class="r-section" id="r-fc" style="display:none">
       <h3>Nedbørsprognose (YR)</h3>
       <div class="precip-grid">
-        <div class="precip-cell"><div class="plbl">Neste 1 t</div><div class="pval" id="fc-1h">–</div><div class="punit">mm</div></div>
-        <div class="precip-cell"><div class="plbl">Neste 3 t</div><div class="pval" id="fc-3h">–</div><div class="punit">mm</div></div>
-        <div class="precip-cell"><div class="plbl">Neste 6 t</div><div class="pval" id="fc-6h">–</div><div class="punit">mm</div></div>
+        <div class="precip-cell"><div class="plbl">Neste 1 t</div><div class="pval" id="fc-1h">–</div><div class="punit">mm/t</div></div>
         <div class="precip-cell"><div class="plbl">Neste 24 t</div><div class="pval" id="fc-24h">–</div><div class="punit">mm</div></div>
       </div>
       <div class="chart-wrap">
@@ -581,17 +591,29 @@ function destroyCharts() {
   if (chartFrost) { chartFrost.destroy(); chartFrost = null; }
 }
 
-function barChart(id, labels, data, color, yLabel) {
+function barChart(id, labels, data, color, yLabel, threshold) {
   const ctx = document.getElementById(id).getContext('2d');
+  const datasets = [
+    { data, backgroundColor: color + 'bb', borderColor: color, borderWidth: 1, borderRadius: 2 },
+  ];
+  if (threshold != null) {
+    datasets.push({
+      type: 'line',
+      data: data.map(() => threshold),
+      borderColor: '#e94560',
+      borderWidth: 1.5,
+      borderDash: [5, 3],
+      pointRadius: 0,
+      fill: false,
+      label: `Terskel ${threshold} mm`,
+    });
+  }
   return new Chart(ctx, {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [{ data, backgroundColor: color + 'bb', borderColor: color, borderWidth: 1, borderRadius: 2 }],
-    },
+    data: { labels, datasets },
     options: {
       responsive: true,
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: !!threshold, labels: { color: '#8b949e', font: { size: 8 }, boxWidth: 16 } } },
       scales: {
         x: { ticks: { color: '#8b949e', maxTicksLimit: 8, maxRotation: 0, font: { size: 8 } }, grid: { display: false } },
         y: { ticks: { color: '#8b949e', font: { size: 8 } }, grid: { color: '#21262d' }, min: 0,
@@ -602,10 +624,59 @@ function barChart(id, labels, data, color, yLabel) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+//  VARSLING – terskellogikk
+// ──────────────────────────────────────────────────────────────────────────
+function getScenario(sm) {
+  if (!sm) return null;
+  if (sm.midPct >= 70) return { no: 1, threshH: 10, threshD: 40 }; // 70-80% og >80%
+  return             { no: 2, threshH: 15, threshD: 60 };           // <70% – tørr jord
+}
+
+function renderAlert(sm, p1h, p24h) {
+  const alertEl = document.getElementById('r-alert');
+  const sc = getScenario(sm);
+  if (!sc || p1h == null) { alertEl.style.display = 'none'; return; }
+  alertEl.style.display = '';
+
+  const excH = p1h  >= sc.threshH;
+  const excD = p24h >= sc.threshD;
+  const nearH = p1h  >= sc.threshH * 0.5;
+  const nearD = p24h >= sc.threshD * 0.5;
+
+  let bg, textColor, icon, statusTxt;
+  if (excH || excD) {
+    bg = '#3d0f0f'; textColor = '#ff6b6b'; icon = '🔴'; statusTxt = 'TERSKEL OVERSKREDET';
+  } else if (nearH || nearD) {
+    bg = '#2d2500'; textColor = '#f5c000'; icon = '🟡'; statusTxt = 'NÆRMER SEG TERSKEL';
+  } else {
+    bg = '#0d2818'; textColor = '#40c463'; icon = '🟢'; statusTxt = 'UNDER TERSKEL';
+  }
+
+  const smDesc = sm ? `${sm.label} (${sm.desc})` : '–';
+  const warns = [
+    excH ? `⚠ Prognose 1t: <b>${p1h.toFixed(1)} mm/t</b> — terskel ${sc.threshH} mm/t` : '',
+    excD ? `⚠ Prognose 24t: <b>${p24h.toFixed(0)} mm</b> — terskel ${sc.threshD} mm` : '',
+  ].filter(Boolean);
+
+  document.getElementById('r-alert-body').innerHTML = `
+    <div class="alert-box" style="background:${bg}">
+      <div class="alert-status" style="color:${textColor}">${icon} ${statusTxt}</div>
+      <div class="alert-meta">
+        Scenario ${sc.no} aktivt · Vannmetning: ${smDesc}<br>
+        Terskler: <b>${sc.threshH} mm/t</b> · <b>${sc.threshD} mm/døgn</b>
+      </div>
+      ${warns.map(w => `<div class="alert-warn" style="color:${textColor}">${w}</div>`).join('')}
+    </div>
+    <div style="font-size:9px;color:#484f58;margin-top:3px">
+      Scenario 1 (≥70 %): 10 mm/t, 40 mm/d &nbsp;|&nbsp; Scenario 2 (&lt;70 %): 15 mm/t, 60 mm/d
+    </div>`;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 //  SHOW / HIDE SECTIONS
 // ──────────────────────────────────────────────────────────────────────────
 function showSections(ids) {
-  for (const id of ['r-loc','r-sm','r-fc','r-hist','r-frost'])
+  for (const id of ['r-loc','r-alert','r-sm','r-fc','r-hist','r-frost'])
     document.getElementById(id).style.display = ids.includes(id) ? '' : 'none';
   document.getElementById('report-empty').style.display = ids.length ? 'none' : '';
 }
@@ -643,18 +714,18 @@ async function generateReport(lat, lon) {
 
   // Show loading state
   destroyCharts();
-  showSections(['r-loc','r-sm','r-fc','r-hist']);
+  showSections(['r-loc','r-alert','r-sm','r-fc','r-hist']);
   setLoading('r-sm-body', true);
   document.getElementById('r-loc-name').textContent   = '…';
   document.getElementById('r-loc-coords').textContent = `${lat.toFixed(4)}°N  ${lon.toFixed(4)}°Ø`;
-  ['fc-1h','fc-3h','fc-6h','fc-24h'].forEach(id => document.getElementById(id).textContent = '…');
+  ['fc-1h','fc-24h'].forEach(id => document.getElementById(id).textContent = '…');
   document.getElementById('r-hist-total').textContent = '…';
 
   // Check if near Frost station
   const distToStation = Math.hypot(lat - STATION.lat, lon - STATION.lon);
   const nearStation   = distToStation < 0.05; // ~5 km
 
-  if (nearStation) showSections(['r-loc','r-sm','r-fc','r-hist','r-frost']);
+  if (nearStation) showSections(['r-loc','r-alert','r-sm','r-fc','r-hist','r-frost']);
 
   // Run all fetches in parallel
   const [place, smClass, forecast, hist] = await Promise.allSettled([
@@ -683,27 +754,35 @@ async function generateReport(lat, lon) {
   }
 
   // ── YR Forecast ──
-  const fc = forecast.value;
+  const fc  = forecast.value;
+  const sc  = getScenario(sm);
+  let p1h = null, p24h = null;
   if (fc) {
     const series = fc.properties?.timeseries || [];
-    const p1h  = series[0]?.data?.next_1_hours?.details?.precipitation_amount ?? 0;
-    const p3h  = series.slice(0, 3).reduce((s, t) => s + (t?.data?.next_1_hours?.details?.precipitation_amount ?? 0), 0);
-    const p6h  = series[0]?.data?.next_6_hours?.details?.precipitation_amount
-              ?? series.slice(0, 6).reduce((s, t) => s + (t?.data?.next_1_hours?.details?.precipitation_amount ?? 0), 0);
-    const p24h = series.slice(0, 24).reduce((s, t) => s + (t?.data?.next_1_hours?.details?.precipitation_amount ?? 0), 0);
-    document.getElementById('fc-1h').textContent  = p1h.toFixed(1);
-    document.getElementById('fc-3h').textContent  = p3h.toFixed(1);
-    document.getElementById('fc-6h').textContent  = p6h.toFixed(1);
-    document.getElementById('fc-24h').textContent = p24h.toFixed(0);
+    p1h  = series[0]?.data?.next_1_hours?.details?.precipitation_amount ?? 0;
+    p24h = series.slice(0, 24).reduce((s, t) => s + (t?.data?.next_1_hours?.details?.precipitation_amount ?? 0), 0);
+
+    const cellColor = (val, thresh) =>
+      val >= thresh        ? '#ff6b6b' :
+      val >= thresh * 0.5  ? '#f5c000' : '#58a6ff';
+
+    const el1h  = document.getElementById('fc-1h');
+    const el24h = document.getElementById('fc-24h');
+    el1h.textContent  = p1h.toFixed(1);
+    el24h.textContent = p24h.toFixed(0);
+    if (sc) {
+      el1h.style.color  = cellColor(p1h,  sc.threshH);
+      el24h.style.color = cellColor(p24h, sc.threshD);
+    }
 
     const fcSeries = series.slice(0, 48);
-    const fcLabels = fcSeries.map(s => {
-      const d = new Date(s.time);
-      return d.toLocaleString('nb-NO', { weekday:'short', hour:'2-digit', minute:'2-digit' });
-    });
+    const fcLabels = fcSeries.map(s => new Date(s.time).toLocaleString('nb-NO', { weekday:'short', hour:'2-digit', minute:'2-digit' }));
     const fcData   = fcSeries.map(s => s.data?.next_1_hours?.details?.precipitation_amount ?? 0);
-    chartFc = barChart('chart-fc', fcLabels, fcData, '#1d6fa4', 'mm/t');
+    chartFc = barChart('chart-fc', fcLabels, fcData, '#1d6fa4', 'mm/t', sc?.threshH);
   }
+
+  // ── Varslingsstatus ──
+  renderAlert(sm, p1h, p24h);
 
   // ── Nedbørshistorikk ──
   const h = hist.value;
@@ -758,7 +837,7 @@ async function generateStationReport() {
   document.getElementById('r-loc-name').textContent   = STATION.name;
   document.getElementById('r-loc-coords').textContent = `${lat.toFixed(4)}°N  ${lon.toFixed(4)}°Ø`;
   setLoading('r-frost-body', true);
-  ['fc-1h','fc-3h','fc-6h','fc-24h'].forEach(id => document.getElementById(id).textContent = '…');
+  ['fc-1h','fc-24h'].forEach(id => document.getElementById(id).textContent = '…');
 
   const [frostRes, forecastRes] = await Promise.allSettled([
     getFrostPrecip(48),
@@ -800,13 +879,8 @@ async function generateStationReport() {
   if (fc) {
     const series = fc.properties?.timeseries || [];
     const p1h  = series[0]?.data?.next_1_hours?.details?.precipitation_amount ?? 0;
-    const p3h  = series.slice(0,3).reduce((s,t) => s+(t?.data?.next_1_hours?.details?.precipitation_amount??0),0);
-    const p6h  = series[0]?.data?.next_6_hours?.details?.precipitation_amount
-              ?? series.slice(0,6).reduce((s,t) => s+(t?.data?.next_1_hours?.details?.precipitation_amount??0),0);
     const p24h = series.slice(0,24).reduce((s,t) => s+(t?.data?.next_1_hours?.details?.precipitation_amount??0),0);
     document.getElementById('fc-1h').textContent  = p1h.toFixed(1);
-    document.getElementById('fc-3h').textContent  = p3h.toFixed(1);
-    document.getElementById('fc-6h').textContent  = p6h.toFixed(1);
     document.getElementById('fc-24h').textContent = p24h.toFixed(0);
     const fcSeries = series.slice(0,48);
     const fcLabels = fcSeries.map(s => new Date(s.time).toLocaleString('nb-NO',{weekday:'short',hour:'2-digit',minute:'2-digit'}));
