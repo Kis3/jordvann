@@ -353,13 +353,6 @@
         <div id="area-varsel"></div>
       </div>
 
-      <!-- Kartutsnitt – rent vannmetningslag -->
-      <div class="area-section">
-        <h3>Kartutsnitt – kun vannmetningslag</h3>
-        <img id="area-img" src="" alt="Vannmetning Fv609"
-             style="width:100%;border-radius:6px;image-rendering:pixelated;border:1px solid #30363d" />
-      </div>
-
       <!-- Fordeling vannmetning -->
       <div class="area-section">
         <h3>Vannmetning – fordeling av landareal</h3>
@@ -747,50 +740,35 @@ function renderAlert(sm, p1h, p24h) {
 //  AREALRAPPORT – vannmetningsfordeling over Fv609-rektangelet
 // ──────────────────────────────────────────────────────────────────────────
 async function getAreaSm() {
-  // Konverter AREA_RECT-grenser til EPSG:3857
-  const nv = AREA_RECT.bounds[0], so = AREA_RECT.bounds[1];
-  const sw = L.CRS.EPSG3857.project(L.latLng(so[0], nv[1])); // sørvest
-  const ne = L.CRS.EPSG3857.project(L.latLng(nv[0], so[1])); // nordøst
-  const bbox  = `${sw.x.toFixed(0)},${sw.y.toFixed(0)},${ne.x.toFixed(0)},${ne.y.toFixed(0)}`;
-  const epoch = dateToEpoch(calValue('sm'));
-  const sz    = 256; // høyere oppløsning for bedre statistikk og visning
+  // Prøv et 7×5 rutenettsutvalg av punkter innenfor AREA_RECT.
+  // Gjenbruker den allerede fungerende getSmPixel() som bruker d=0.5
+  // og er bevist å returnere korrekte verdier for enkeltpunkter.
+  const ROWS = 5, COLS = 7;
+  const nv = AREA_RECT.bounds[0]; // [lat, lon] NV
+  const so = AREA_RECT.bounds[1]; // [lat, lon] SØ
 
-  let url = `${SENORGE}/odmhbv_ssspct/ImageServer/exportImage`
-          + `?bbox=${bbox}&bboxSR=3857&size=${sz},${sz}&imageSR=3857`
-          + `&format=png32&transparent=true&f=image`;
-  if (epoch) url += `&time=${epoch}`;
+  const latStep = (nv[0] - so[0]) / (ROWS + 1);
+  const lonStep = (so[1] - nv[1]) / (COLS + 1);
 
-  const resp = await fetch(url);
-  const blob = await resp.blob();
+  const punkter = [];
+  for (let r = 1; r <= ROWS; r++)
+    for (let c = 1; c <= COLS; c++)
+      punkter.push([nv[0] - r * latStep, nv[1] + c * lonStep]);
 
-  // Lag blob-URL for direkte visning (rent lag, ingen bakgrunnskart)
-  const imgUrl = URL.createObjectURL(blob);
+  // Hent alle parallelt
+  const resultater = await Promise.all(
+    punkter.map(([lat, lon]) => getSmPixel(lat, lon))
+  );
 
-  const bmp  = await createImageBitmap(blob);
-  const cv  = document.createElement('canvas');
-  cv.width  = sz; cv.height = sz;
-  cv.getContext('2d').drawImage(bmp, 0, 0);
-  const data = cv.getContext('2d').getImageData(0, 0, sz, sz).data;
-
-  // Tell piksler per klasse
   const counts = Object.fromEntries(SM_COLORS.map(c => [c.label, 0]));
   let noData = 0;
-
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
-    if (a < 30 || (r < 15 && g < 15 && b < 15)) { noData++; continue; }
-
-    let best = null, minD = Infinity;
-    for (const cls of SM_COLORS) {
-      const d = Math.sqrt((r-cls.r)**2 + (g-cls.g)**2 + (b-cls.b)**2);
-      if (d < minD) { minD = d; best = cls; }
-    }
-    if (best && minD < 120) counts[best.label]++;
+  for (const cls of resultater) {
+    if (cls) counts[cls.label]++;
     else noData++;
   }
 
-  const dataPx = Object.values(counts).reduce((s, v) => s + v, 0);
-  return { counts, dataPx, total: sz * sz, imgUrl };
+  const dataPx = resultater.length - noData;
+  return { counts, dataPx, total: resultater.length };
 }
 
 async function lastArealrapport() {
@@ -801,13 +779,7 @@ async function lastArealrapport() {
   document.getElementById('area-dato-lbl').textContent = `Dato: ${dato} · seNorge ODM/HBV 1×1 km`;
 
   try {
-    const { counts, dataPx, total, imgUrl } = await getAreaSm();
-
-    // Vis rent kartutsnitt (kun vannmetningslag, hvit bakgrunn)
-    const imgEl = document.getElementById('area-img');
-    if (imgEl._prevUrl) URL.revokeObjectURL(imgEl._prevUrl);
-    imgEl._prevUrl = imgUrl;
-    imgEl.src = imgUrl;
+    const { counts, dataPx, total } = await getAreaSm();
 
     // Finn dominerende klasse (ekskluder grå "Under 60%" for varslingsnivå)
     const fuktige = SM_COLORS.filter(c => c.midPct >= 70);
