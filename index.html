@@ -197,7 +197,7 @@
     /* Charts */
     .chart-wrap { margin-top: 8px; }
     .chart-lbl { font-size: 9px; color: #8b949e; margin-bottom: 4px; }
-    canvas { max-height: 120px !important; }
+    #report canvas { max-height: 120px !important; } /* kun rapportpanelets diagrammer */
 
     /* Frost station section */
     #r-frost { display: none; }
@@ -444,6 +444,7 @@ const CLIENT_ID  = 'ff18c1d5-0abc-4af7-bccb-e4e3fe8ff3ad';
 const FROST_AUTH = 'Basic ' + btoa(CLIENT_ID + ':');
 const SENORGE    = 'https://gis3.nve.no/image/rest/services/seNorgeGrid';
 const GTS        = 'https://gts.nve.no/api/GridTimeSeries';
+const HIST_DAYS  = 7; // nedbørshistorikk-vindu i punktrapporten
 
 const STATION   = { id: 'SN57162', name: 'FØRDE PLU', lat: 61.457407, lon: 5.833958 };
 
@@ -509,7 +510,12 @@ function makeArcLayer(name, dateEpoch, opacity) {
   return new ArcGISImageLayer({ layerName: name, date: dateEpoch, opacity });
 }
 
-function todayISO() { return new Date().toISOString().slice(0, 10); }
+// Lokal dato som ISO-streng (yyyy-mm-dd). Ikke bruk toISOString() –
+// den gir UTC-døgnet, som er dagen før mellom midnatt og kl. 01/02 norsk tid.
+function toLocalISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function todayISO() { return toLocalISO(new Date()); }
 
 function dateToEpoch(s) {
   return s ? new Date(s + 'T12:00:00Z').getTime() : null;
@@ -552,16 +558,23 @@ async function getSmPixel(lat, lon) {
           + `?bbox=${bbox}&bboxSR=3857&size=${sz},${sz}&imageSR=3857&format=png32&transparent=true&f=image`;
   if (epoch) url += `&time=${epoch}`;
 
-  const resp = await fetch(url);
-  const blob = await resp.blob();
-  const bmp  = await createImageBitmap(blob);
+  let px;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const blob = await resp.blob();
+    const bmp  = await createImageBitmap(blob);
 
-  const cv  = document.createElement('canvas');
-  cv.width  = sz; cv.height = sz;
-  const ctx = cv.getContext('2d');
-  ctx.drawImage(bmp, 0, 0);
-  const c   = Math.floor(sz / 2);
-  const px  = ctx.getImageData(c, c, 1, 1).data; // centre pixel
+    const cv  = document.createElement('canvas');
+    cv.width  = sz; cv.height = sz;
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(bmp, 0, 0);
+    bmp.close(); // frigi bitmap-minne – viktig når arealrapporten henter 35 parallelt
+    const c = Math.floor(sz / 2);
+    px = ctx.getImageData(c, c, 1, 1).data; // centre pixel
+  } catch {
+    return null; // nettverksfeil / ugyldig bilde → behandle som "ingen data"
+  }
 
   // Transparent → outside Norway domain
   if (px[3] < 30) return null;
@@ -574,7 +587,9 @@ async function getSmPixel(lat, lon) {
     const dist = Math.sqrt((px[0]-cls.r)**2 + (px[1]-cls.g)**2 + (px[2]-cls.b)**2);
     if (dist < minD) { minD = dist; best = cls; }
   }
-  if (minD > 120) return null; // unrecognised colour
+  // 120 ≈ halvparten av minste RGB-avstand mellom to legendefarger –
+  // nærmere enn dette er trygt en klassematch, lenger unna er ukjent farge
+  if (minD > 120) return null;
   return best;
 }
 
@@ -584,7 +599,7 @@ async function getSmPixel(lat, lon) {
 async function getHistPrecip(lat, lon) {
   const { x, y } = latLonToUTM33(lat, lon);
   const end   = todayISO();
-  const start = new Date(Date.now() - 7*24*3600e3).toISOString().slice(0, 10);
+  const start = toLocalISO(new Date(Date.now() - HIST_DAYS * 24 * 3600e3));
   // Route via Vercel serverless proxy – gts.nve.no lacks CORS headers
   const url  = `/api/gts?x=${x}&y=${y}&start=${start}&end=${end}`;
   const resp  = await fetch(url);
@@ -739,30 +754,32 @@ function renderAlert(sm, p1h, p24h) {
 // ──────────────────────────────────────────────────────────────────────────
 //  AREALRAPPORT – vannmetningsfordeling over Fv609-rektangelet
 // ──────────────────────────────────────────────────────────────────────────
+// Rutenettstørrelse for arealutvalget (7×5 = 35 punkter over AREA_RECT)
+const AREA_GRID_ROWS = 5, AREA_GRID_COLS = 7;
+
 async function getAreaSm() {
-  // Prøv et 7×5 rutenettsutvalg av punkter innenfor AREA_RECT.
-  // Gjenbruker den allerede fungerende getSmPixel() som bruker d=0.5
-  // og er bevist å returnere korrekte verdier for enkeltpunkter.
-  const ROWS = 5, COLS = 7;
+  // Rutenettsutvalg av punkter innenfor AREA_RECT.
+  // Gjenbruker getSmPixel() som er bevist korrekt for enkeltpunkter.
   const nv = AREA_RECT.bounds[0]; // [lat, lon] NV
   const so = AREA_RECT.bounds[1]; // [lat, lon] SØ
 
-  const latStep = (nv[0] - so[0]) / (ROWS + 1);
-  const lonStep = (so[1] - nv[1]) / (COLS + 1);
+  const latStep = (nv[0] - so[0]) / (AREA_GRID_ROWS + 1);
+  const lonStep = (so[1] - nv[1]) / (AREA_GRID_COLS + 1);
 
   const punkter = [];
-  for (let r = 1; r <= ROWS; r++)
-    for (let c = 1; c <= COLS; c++)
+  for (let r = 1; r <= AREA_GRID_ROWS; r++)
+    for (let c = 1; c <= AREA_GRID_COLS; c++)
       punkter.push([nv[0] - r * latStep, nv[1] + c * lonStep]);
 
-  // Hent alle parallelt
-  const resultater = await Promise.all(
+  // Hent alle parallelt – allSettled slik at ett feilet punkt ikke velter alt
+  const resultater = await Promise.allSettled(
     punkter.map(([lat, lon]) => getSmPixel(lat, lon))
   );
 
   const counts = Object.fromEntries(SM_COLORS.map(c => [c.label, 0]));
   let noData = 0;
-  for (const cls of resultater) {
+  for (const res of resultater) {
+    const cls = res.status === 'fulfilled' ? res.value : null;
     if (cls) counts[cls.label]++;
     else noData++;
   }
@@ -771,7 +788,10 @@ async function getAreaSm() {
   return { counts, dataPx, total: resultater.length };
 }
 
+let arealSeq = 0; // sekvensnummer – forkaster utdaterte svar ved raske datoklikk
+
 async function lastArealrapport() {
+  const seq = ++arealSeq;
   document.getElementById('area-loading').style.display  = 'flex';
   document.getElementById('area-content').style.display  = 'none';
 
@@ -780,6 +800,7 @@ async function lastArealrapport() {
 
   try {
     const { counts, dataPx, total } = await getAreaSm();
+    if (seq !== arealSeq) return; // nyere kall pågår – forkast dette svaret
 
     // Finn dominerende klasse (ekskluder grå "Under 60%" for varslingsnivå)
     const fuktige = SM_COLORS.filter(c => c.midPct >= 70);
@@ -837,6 +858,7 @@ async function lastArealrapport() {
     document.getElementById('area-content').style.display = 'block';
 
   } catch(e) {
+    if (seq !== arealSeq) return;
     document.getElementById('area-loading').innerHTML =
       `<span style="color:#ff6b6b;font-size:10px">Feil ved henting av arealdata</span>`;
   }
@@ -851,14 +873,15 @@ function showSections(ids) {
   document.getElementById('report-empty').style.display = ids.length ? 'none' : '';
 }
 
-function setLoading(id, on) {
-  const el = document.getElementById(id);
-  if (on) el.innerHTML = '<span class="spinner"></span>';
+function setLoading(id) {
+  document.getElementById(id).innerHTML = '<span class="spinner"></span>';
 }
 
 // ──────────────────────────────────────────────────────────────────────────
 //  GENERATE REPORT
 // ──────────────────────────────────────────────────────────────────────────
+let reportSeq = 0; // forkaster utdaterte svar ved raske kartklikk
+
 async function generateReport(lat, lon) {
   // Read from inputs if not provided
   if (lat === undefined) {
@@ -866,6 +889,7 @@ async function generateReport(lat, lon) {
     lon = parseFloat(document.getElementById('inp-lon').value);
   }
   if (isNaN(lat) || isNaN(lon)) return;
+  const seq = ++reportSeq;
 
   // Clamp to Norway-ish range
   lat = Math.max(57, Math.min(72, lat));
@@ -885,7 +909,7 @@ async function generateReport(lat, lon) {
   // Show loading state
   destroyCharts();
   showSections(['r-loc','r-alert','r-sm','r-fc','r-hist']);
-  setLoading('r-sm-body', true);
+  setLoading('r-sm-body');
   document.getElementById('r-loc-name').textContent   = '…';
   document.getElementById('r-loc-coords').textContent = `${lat.toFixed(4)}°N  ${lon.toFixed(4)}°Ø`;
   ['fc-1h','fc-24h'].forEach(id => document.getElementById(id).textContent = '…');
@@ -898,18 +922,22 @@ async function generateReport(lat, lon) {
   if (nearStation) showSections(['r-loc','r-alert','r-sm','r-fc','r-hist','r-frost']);
 
   // Run all fetches in parallel
-  const [place, smClass, forecast, hist] = await Promise.allSettled([
+  const settled = await Promise.allSettled([
     getPlaceName(lat, lon),
     getSmPixel(lat, lon),
     getForecast(lat, lon),
     getHistPrecip(lat, lon),
   ]);
+  if (seq !== reportSeq) return; // nyere klikk pågår – forkast dette svaret
+  // Eksplisitt fulfilled-sjekk: .value på en rejected er undefined, gjør det tydelig
+  const [place, smClass, forecast, hist] =
+    settled.map(r => (r.status === 'fulfilled' ? r.value : null));
 
   // ── Location ──
-  document.getElementById('r-loc-name').textContent = place.value ?? '–';
+  document.getElementById('r-loc-name').textContent = place ?? '–';
 
   // ── Vannmetning ──
-  const sm = smClass.value;
+  const sm = smClass;
   const smBody = document.getElementById('r-sm-body');
   if (sm) {
     const pct  = sm.midPct;
@@ -924,7 +952,7 @@ async function generateReport(lat, lon) {
   }
 
   // ── YR Forecast ──
-  const fc  = forecast.value;
+  const fc  = forecast;
   const sc  = getScenario(sm);
   let p1h = null, p24h = null;
   if (fc) {
@@ -955,7 +983,7 @@ async function generateReport(lat, lon) {
   renderAlert(sm, p1h, p24h);
 
   // ── Nedbørshistorikk ──
-  const h = hist.value;
+  const h = hist;
   if (h && h.length) {
     const total = h.reduce((s, p) => s + p.v, 0);
     document.getElementById('r-hist-total').textContent = `Total: ${total.toFixed(1)} mm`;
@@ -971,7 +999,7 @@ async function generateReport(lat, lon) {
   // ── Frost station (nearby) ──
   if (nearStation) {
     document.getElementById('r-frost').style.display = '';
-    setLoading('r-frost-body', true);
+    setLoading('r-frost-body');
     try {
       const frostPts = await getFrostPrecip(24);
       const last1h   = frostPts.at(-1)?.v ?? null;
@@ -993,6 +1021,7 @@ async function generateReport(lat, lon) {
 // ──────────────────────────────────────────────────────────────────────────
 async function generateStationReport() {
   const { lat, lon } = { lat: STATION.lat, lon: STATION.lon };
+  const seq = ++reportSeq; // deler sekvens med generateReport – de skriver til samme panel
   document.getElementById('inp-lat').value = lat.toFixed(4);
   document.getElementById('inp-lon').value = lon.toFixed(4);
 
@@ -1006,16 +1035,17 @@ async function generateStationReport() {
   showSections(['r-loc','r-frost','r-fc']);
   document.getElementById('r-loc-name').textContent   = STATION.name;
   document.getElementById('r-loc-coords').textContent = `${lat.toFixed(4)}°N  ${lon.toFixed(4)}°Ø`;
-  setLoading('r-frost-body', true);
+  setLoading('r-frost-body');
   ['fc-1h','fc-24h'].forEach(id => document.getElementById(id).textContent = '…');
 
   const [frostRes, forecastRes] = await Promise.allSettled([
     getFrostPrecip(48),
     getForecast(lat, lon),
   ]);
+  if (seq !== reportSeq) return; // nyere rapport pågår – forkast
 
   // ── Frost data ──
-  const pts = frostRes.value || [];
+  const pts = (frostRes.status === 'fulfilled' ? frostRes.value : null) || [];
   if (pts.length) {
     const last1h = pts.at(-1)?.v ?? null;
     const sum24h = pts.slice(-24).reduce((s, p) => s + p.v, 0);
@@ -1045,7 +1075,7 @@ async function generateStationReport() {
   }
 
   // ── YR forecast ──
-  const fc = forecastRes.value;
+  const fc = forecastRes.status === 'fulfilled' ? forecastRes.value : null;
   if (fc) {
     const series = fc.properties?.timeseries || [];
     const p1h  = series[0]?.data?.next_1_hours?.details?.precipitation_amount ?? 0;
@@ -1085,8 +1115,9 @@ const MONTHS_NB = ['januar','februar','mars','april','mai','juni','juli','august
 // calState: { id, value (ISO string), viewYear, viewMonth }
 const calState = {};
 
-function calGetMin() { return new Date(Date.now() + CAL_MIN_OFFSET*24*3600e3); }
-function calGetMax() { return new Date(Date.now() + CAL_MAX_OFFSET*24*3600e3); }
+// Min/max som lokale ISO-strenger – sammenlignes leksikografisk (fungerer for yyyy-mm-dd)
+function calGetMin() { return toLocalISO(new Date(Date.now() + CAL_MIN_OFFSET*24*3600e3)); }
+function calGetMax() { return toLocalISO(new Date(Date.now() + CAL_MAX_OFFSET*24*3600e3)); }
 
 function calRender(id) {
   const st  = calState[id];
@@ -1104,11 +1135,12 @@ function calRender(id) {
   </div><div class="cal-grid">`;
   DAYS_NB.forEach(d => { html += `<div class="cal-dow">${d}</div>`; });
   for (let i = 0; i < startOffset; i++) html += `<div class="cal-day cal-empty"></div>`;
+  const today = todayISO();
   for (let d = 1; d <= daysInMonth; d++) {
-    const date = new Date(y, m, d);
-    const iso  = date.toISOString().slice(0,10);
-    const today = todayISO();
-    const disabled = date < min || date > max;
+    // Bygg ISO-strengen direkte fra lokale tall – toISOString() ville gitt
+    // forrige dag (UTC-døgnet) og gjort at klikk på 15. valgte 14.
+    const iso  = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const disabled = iso < min || iso > max;
     const selected = iso === st.value;
     const isToday  = iso === today;
     let cls = 'cal-day';
