@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #0d1117; color: #c9d1d9; }
@@ -79,12 +78,11 @@
     .legend-box { width: 18px; height: 11px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
 
     /* ── MAP ── */
-    #map { flex: 1; min-width: 0; cursor: crosshair !important; position: relative; }
-    #map .leaflet-container { cursor: crosshair !important; }
+    #map { flex: 1; min-width: 0; position: relative; }
 
     /* ── AREALRAPPORT-PANEL ── */
     #area-panel {
-      width: 300px; flex-shrink: 0;
+      width: 360px; flex-shrink: 0;
       background: #0d1117;
       border-left: 1px solid #30363d;
       display: flex; flex-direction: column;
@@ -112,95 +110,21 @@
     .kls-bar { height: 100%; border-radius: 3px; transition: width 0.4s; }
     .kls-pct { width: 32px; text-align: right; color: #8b949e; flex-shrink: 0; }
 
-    .areal-varsel { border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; font-size: 10px; }
-    .areal-varsel .av-status { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
-    .areal-varsel .av-meta { color: #c9d1d9; line-height: 1.5; }
-
-    /* ── REPORT PANEL ── */
-    #report {
-      width: 340px; flex-shrink: 0;
-      background: #161b22;
-      border-left: 1px solid #30363d;
-      display: flex; flex-direction: column;
-      overflow: hidden;
+    /* Nedbørsstatistikk over området */
+    .rr-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
+    .rr-cell {
+      background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+      padding: 8px 5px; text-align: center;
     }
+    .rr-cell .rv { font-size: 20px; font-weight: 700; color: #58a6ff; }
+    .rr-cell .rl { font-size: 9px; color: #8b949e; margin-top: 2px; }
+    .rr-note { font-size: 9px; color: #484f58; margin-top: 4px; line-height: 1.5; }
 
-    #report-head {
-      padding: 12px 14px 10px;
-      border-bottom: 1px solid #30363d;
-      flex-shrink: 0;
-    }
-    #report-head h2 { font-size: 11px; font-weight: 700; color: #e6edf3; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.06em; }
-
-    .coord-row { display: flex; gap: 5px; align-items: flex-end; }
-    .coord-field { flex: 1; }
-    .coord-field label { font-size: 9px; color: #8b949e; margin-bottom: 2px; }
-    .coord-field input {
-      width: 100%; padding: 5px 6px;
-      background: #0d1117; color: #e6edf3;
-      border: 1px solid #30363d; border-radius: 5px; font-size: 11px;
-    }
-    .coord-field input:focus { outline: none; border-color: #58a6ff; }
-    .gen-btn {
-      padding: 5px 10px; background: #238636; color: #fff;
-      border: none; border-radius: 5px; font-size: 11px; cursor: pointer;
-      flex-shrink: 0; white-space: nowrap; font-weight: 600;
-    }
-    .gen-btn:hover { background: #2ea043; }
-
-    #report-body {
-      flex: 1; overflow-y: auto;
-      padding: 12px 14px;
-      display: flex; flex-direction: column; gap: 10px;
-    }
-
-    /* Empty state */
-    #report-empty {
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      height: 100%; gap: 10px; color: #8b949e; text-align: center; padding: 20px;
-    }
-    #report-empty .icon { font-size: 36px; opacity: 0.4; }
-    #report-empty p { font-size: 11px; line-height: 1.5; }
-
-    /* Report sections */
-    .r-section { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px 12px; }
-    .r-section h3 { font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: #8b949e; margin-bottom: 8px; }
-
-    /* Location */
-    #r-loc-name { font-size: 13px; font-weight: 700; color: #e6edf3; margin-bottom: 2px; }
-    #r-loc-coords { font-size: 10px; color: #8b949e; font-family: monospace; }
-
-    /* Vannmetning */
-    .sm-value { font-size: 28px; font-weight: 700; margin: 4px 0 2px; }
-    .sm-label { font-size: 11px; }
-    .progress-track { height: 8px; background: #21262d; border-radius: 4px; margin: 6px 0; overflow: hidden; }
-    .progress-fill  { height: 100%; border-radius: 4px; transition: width 0.4s; }
-    .sm-source { font-size: 9px; color: #6e7681; margin-top: 4px; }
-
-    /* Alert box */
-    .alert-box { border-radius: 6px; padding: 10px 12px; margin-bottom: 2px; }
+    /* Varslingsboks */
+    .alert-box { border-radius: 6px; padding: 10px 12px; }
     .alert-status { font-size: 13px; font-weight: 700; margin-bottom: 5px; }
     .alert-meta { font-size: 10px; color: #c9d1d9; line-height: 1.6; }
     .alert-warn { font-size: 10px; font-weight: 600; margin-top: 5px; }
-
-    /* Precip forecast grid */
-    .precip-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-    .precip-cell {
-      background: #161b22; border: 1px solid #30363d; border-radius: 6px;
-      padding: 7px 5px; text-align: center;
-    }
-    .precip-cell .pval { font-size: 22px; font-weight: 700; color: #58a6ff; }
-    .precip-cell .punit { font-size: 9px; color: #8b949e; }
-    .precip-cell .plbl { font-size: 9px; color: #8b949e; margin-bottom: 3px; }
-
-    /* Charts */
-    .chart-wrap { margin-top: 8px; }
-    .chart-lbl { font-size: 9px; color: #8b949e; margin-bottom: 4px; }
-    #report canvas { max-height: 120px !important; } /* kun rapportpanelets diagrammer */
-
-    /* Frost station section */
-    #r-frost { display: none; }
 
     /* Loading spinner */
     .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.7s linear infinite; }
@@ -220,9 +144,6 @@
       pointer-events: none;
     }
 
-    /* Map click marker */
-    .click-pin { width: 12px; height: 12px; background: #fff; border: 3px solid #e94560; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
-
     /* Station marker */
     @keyframes pulse {
       0%   { transform: scale(1);   opacity: 0.6; }
@@ -240,16 +161,21 @@
 <div id="sidebar">
   <h1>Skredvarsel Fv 609 Heilevang<span>seNorge ODM + Nedbør</span></h1>
 
+  <!-- Felles dato -->
+  <div class="card">
+    <h2>Dato</h2>
+    <div class="cal-wrap" id="cal-wrap-dato">
+      <button class="cal-trigger" id="cal-trigger-dato" type="button">
+        <span id="cal-label-dato">–</span><span>📅</span>
+      </button>
+      <div class="cal-popup" id="cal-popup-dato"></div>
+    </div>
+    <div style="font-size:9px;color:#484f58;margin-top:5px">Gjelder både kartlag og arealrapport</div>
+  </div>
+
   <!-- Vannmetning WMS -->
   <div class="card">
     <h2>Vannmetning ODM/HBV</h2>
-    <label>Dato</label>
-    <div class="cal-wrap" id="cal-wrap-sm">
-      <button class="cal-trigger" id="cal-trigger-sm" type="button">
-        <span id="cal-label-sm">–</span><span>📅</span>
-      </button>
-      <div class="cal-popup" id="cal-popup-sm"></div>
-    </div>
     <label>Gjennomsiktighet</label>
     <input type="range" id="sm-opacity" min="10" max="100" value="25" step="5"
       oninput="smLayer && smLayer.setOpacity(this.value/100)" />
@@ -267,13 +193,6 @@
       <option value="rr" selected>Døgn (mm/d)</option>
       <option value="rr3d">3 døgn (mm)</option>
     </select>
-    <label>Dato</label>
-    <div class="cal-wrap" id="cal-wrap-rr">
-      <button class="cal-trigger" id="cal-trigger-rr" type="button">
-        <span id="cal-label-rr">–</span><span>📅</span>
-      </button>
-      <div class="cal-popup" id="cal-popup-rr"></div>
-    </div>
     <label>Gjennomsiktighet</label>
     <input type="range" id="rr-opacity" min="10" max="100" value="10" step="5"
       oninput="rrLayer && rrLayer.setOpacity(this.value/100)" />
@@ -301,7 +220,7 @@
       <div class="legend-item"><div class="legend-box" style="background:#e07820"></div>80–90 % – Svært fuktig</div>
       <div class="legend-item"><div class="legend-box" style="background:#f5c000"></div>70–80 % – Fuktig</div>
       <div class="legend-item"><div class="legend-box" style="background:#91cf60"></div>60–70 % – Moderat fuktig</div>
-      <div class="legend-item"><div class="legend-box" style="background:#d0d0d0;border-color:#aaa"></div>Under 60 % – Tørt</div>
+      <div class="legend-item"><div class="legend-box" style="background:#d0d0d0;border-color:#aaa"></div>Under 60 %</div>
     </div>
   </div>
 
@@ -346,12 +265,6 @@
     </div>
     <div id="area-content" style="display:none">
 
-      <!-- Varslingsstatus areal -->
-      <div class="area-section">
-        <h3>Varslingsstatus</h3>
-        <div id="area-varsel"></div>
-      </div>
-
       <!-- Fordeling vannmetning -->
       <div class="area-section">
         <h3>Vannmetning – fordeling av landareal</h3>
@@ -359,82 +272,22 @@
         <div style="font-size:9px;color:#484f58;margin-top:6px" id="area-kilde"></div>
       </div>
 
+      <!-- Nedbør over området -->
+      <div class="area-section">
+        <h3>Nedbør over området</h3>
+        <div id="area-rr"></div>
+      </div>
+
+      <!-- Varslingsstatus (basert på arealtallene over) -->
+      <div class="area-section">
+        <h3>Varslingsstatus</h3>
+        <div id="area-varsel"></div>
+      </div>
+
     </div>
   </div>
 </div>
 
-<!-- ── RAPPORT-PANEL ─────────────────────────────────── -->
-<div id="report">
-  <div id="report-head">
-    <h2>Punkt-rapport</h2>
-    <div class="coord-row">
-      <div class="coord-field">
-        <label>Breddegrad (N)</label>
-        <input type="number" id="inp-lat" placeholder="61.4330" step="0.0001" min="57" max="72" />
-      </div>
-      <div class="coord-field">
-        <label>Lengdegrad (Ø)</label>
-        <input type="number" id="inp-lon" placeholder="5.7000" step="0.0001" min="4" max="32" />
-      </div>
-      <button class="gen-btn" onclick="generateReport()">Hent</button>
-    </div>
-  </div>
-
-  <div id="report-body">
-    <!-- Empty state -->
-    <div id="report-empty">
-      <div class="icon">🗺️</div>
-      <p>Klikk et sted på kartet<br>eller skriv inn koordinater<br>for å generere rapport.</p>
-    </div>
-
-    <!-- Location -->
-    <div class="r-section" id="r-loc" style="display:none">
-      <h3>Sted</h3>
-      <div id="r-loc-name">–</div>
-      <div id="r-loc-coords">–</div>
-    </div>
-
-    <!-- Varslingsstatus -->
-    <div class="r-section" id="r-alert" style="display:none">
-      <h3>Varslingsstatus</h3>
-      <div id="r-alert-body"></div>
-    </div>
-
-    <!-- Vannmetning -->
-    <div class="r-section" id="r-sm" style="display:none">
-      <h3>Vannmetning i jord (ODM/HBV)</h3>
-      <div id="r-sm-body"></div>
-    </div>
-
-    <!-- Nedbørsprognose -->
-    <div class="r-section" id="r-fc" style="display:none">
-      <h3>Nedbørsprognose (YR)</h3>
-      <div class="precip-grid">
-        <div class="precip-cell"><div class="plbl">Neste 1 t</div><div class="pval" id="fc-1h">–</div><div class="punit">mm/t</div></div>
-        <div class="precip-cell"><div class="plbl">Neste 24 t</div><div class="pval" id="fc-24h">–</div><div class="punit">mm</div></div>
-      </div>
-      <div class="chart-wrap">
-        <div class="chart-lbl">Timesnedbør neste 48 t (mm/t)</div>
-        <canvas id="chart-fc"></canvas>
-      </div>
-    </div>
-
-    <!-- Nedbørshistorikk -->
-    <div class="r-section" id="r-hist" style="display:none">
-      <h3>Nedbørshistorikk – seNorge (siste 7 døgn)</h3>
-      <div id="r-hist-total" style="font-size:11px;color:#8b949e;margin-bottom:6px"></div>
-      <canvas id="chart-hist"></canvas>
-      <div style="font-size:9px;color:#484f58;margin-top:4px">Døgn = kl. 08–08, samme inndeling som senorge.no</div>
-    </div>
-
-    <!-- Frost station extras -->
-    <div class="r-section" id="r-frost" style="display:none">
-      <h3>FØRDE PLU (SN57162) – timesmålinger</h3>
-      <div id="r-frost-body"></div>
-      <canvas id="chart-frost" style="margin-top:8px"></canvas>
-    </div>
-  </div>
-</div>
 
 <script>
 // ──────────────────────────────────────────────────────────────────────────
@@ -460,11 +313,11 @@ const AREA_RECT = {
 // (229,229,229) grey = valid "Under 60%" data class (alpha=255, NOT transparent)
 // (1,1,1) near-black = ocean / outside model domain → treated as no-data
 const SM_COLORS = [
-  { r: 204, g:   0, b:   0, label: 'Over 90 %',  desc: 'Mettet',        midPct: 95, color: '#cc0000' }, // red – rarely observed
-  { r: 248, g: 196, b:   0, label: '80–90 %',    desc: 'Svært fuktig',  midPct: 85, color: '#e07820' }, // amber
-  { r: 248, g: 252, b:   0, label: '70–80 %',    desc: 'Fuktig',        midPct: 75, color: '#f5c000' }, // yellow
-  { r:  40, g: 212, b:  96, label: '60–70 %',    desc: 'Moderat fuktig',midPct: 65, color: '#91cf60' }, // green
-  { r: 229, g: 229, b: 229, label: 'Under 60 %', desc: 'Tørt',          midPct: 30, color: '#d0d0d0' }, // grey
+  { r: 204, g:   0, b:   0, label: 'Over 90 %', midPct: 95, color: '#cc0000' }, // red – rarely observed
+  { r: 248, g: 196, b:   0, label: '80–90 %', midPct: 85, color: '#e07820' }, // amber
+  { r: 248, g: 252, b:   0, label: '70–80 %', midPct: 75, color: '#f5c000' }, // yellow
+  { r:  40, g: 212, b:  96, label: '60–70 %', midPct: 65, color: '#91cf60' }, // green
+  { r: 229, g: 229, b: 229, label: 'Under 60 %', midPct: 30, color: '#d0d0d0' }, // grey
 ];
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -480,8 +333,7 @@ function latLonToUTM33(lat, lon) {
 // ──────────────────────────────────────────────────────────────────────────
 //  STATE
 // ──────────────────────────────────────────────────────────────────────────
-let map, smLayer, rrLayer, clickMarker, areaRect;
-let chartFc = null, chartHist = null, chartFrost = null;
+let map, smLayer, rrLayer, areaRect;
 
 // ──────────────────────────────────────────────────────────────────────────
 //  ARCGIS IMAGE LAYER (tile-based, EPSG:3857)
@@ -548,14 +400,14 @@ function todayISO() { return toLocalISO(new Date()); }
 
 function updateSmLayer() {
   if (smLayer) map.removeLayer(smLayer);
-  smLayer = makeArcLayer('odmhbv_ssspct', calValue('sm'), document.getElementById('sm-opacity').value / 100);
+  smLayer = makeArcLayer('odmhbv_ssspct', calValue('dato'), document.getElementById('sm-opacity').value / 100);
   if (document.getElementById('toggle-sm').checked) smLayer.addTo(map);
   lastArealrapport(); // oppdater arealrapport ved ny dato
 }
 
 function updateRrLayer() {
   if (rrLayer) map.removeLayer(rrLayer);
-  rrLayer = makeArcLayer(document.getElementById('rr-layer').value, calValue('rr'), document.getElementById('rr-opacity').value / 100);
+  rrLayer = makeArcLayer(document.getElementById('rr-layer').value, calValue('dato'), document.getElementById('rr-opacity').value / 100);
   if (document.getElementById('toggle-rr').checked) rrLayer.addTo(map);
 }
 
@@ -576,7 +428,7 @@ async function getSmPixel(lat, lon) {
   const sw  = L.CRS.EPSG3857.project(L.latLng(lat - d, lon - d));
   const ne  = L.CRS.EPSG3857.project(L.latLng(lat + d, lon + d));
   const bbox  = `${sw.x.toFixed(0)},${sw.y.toFixed(0)},${ne.x.toFixed(0)},${ne.y.toFixed(0)}`;
-  const mr = dateToMosaicRule('odmhbv_ssspct', calValue('sm'));
+  const mr = dateToMosaicRule('odmhbv_ssspct', calValue('dato'));
   const sz    = 256;
 
   let url = `${SENORGE}/odmhbv_ssspct/ImageServer/exportImage`
@@ -619,32 +471,6 @@ async function getSmPixel(lat, lon) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-//  GTS.NVE.NO – historical precipitation (UTM grid)
-// ──────────────────────────────────────────────────────────────────────────
-async function getHistPrecip(lat, lon) {
-  const { x, y } = latLonToUTM33(lat, lon);
-  // Stemplene D−(HIST_DAYS−1) … D representerer senorge-dagene
-  // D−HIST_DAYS … D−1, altså de siste HIST_DAYS komplette døgnene.
-  const end   = todayISO();
-  const start = addDaysISO(end, -(HIST_DAYS - 1));
-  // Route via Vercel serverless proxy – gts.nve.no lacks CORS headers
-  const url  = `/api/gts?x=${x}&y=${y}&start=${start}&end=${end}`;
-  const resp  = await fetch(url);
-  const text  = await resp.text();
-  if (!resp.ok || text.includes('ErrorMessage') || text.includes('No cell exists')) return null;
-
-  const lines = text.trim().split('\n').filter(l => !l.startsWith('#') && l.includes(';'));
-  lines.shift(); // header row
-  return lines.map(l => {
-    const [dateStr, val] = l.split(';');
-    // gts stempler døgnet ved SLUTT (D kl 08 → D+1 kl 08 lagres som D+1),
-    // så raden stemplet S er senorge-dagen S−1 – samme dag som senorge.no viser.
-    const [d, m, y] = dateStr.trim().split(' ')[0].split('.');
-    return { dagISO: addDaysISO(`${y}-${m}-${d}`, -1), v: parseFloat(val.trim()) };
-  }).filter(p => !isNaN(p.v));
-}
-
-// ──────────────────────────────────────────────────────────────────────────
 //  YR FORECAST
 // ──────────────────────────────────────────────────────────────────────────
 async function getForecast(lat, lon) {
@@ -657,142 +483,21 @@ async function getForecast(lat, lon) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-//  REVERSE GEOCODE (Nominatim)
-// ──────────────────────────────────────────────────────────────────────────
-async function getPlaceName(lat, lon) {
-  try {
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}&format=json&accept-language=nb`,
-      { headers: { 'User-Agent': 'JordvannApp/1.0' } }
-    );
-    const j = await r.json();
-    return j.address?.village || j.address?.town || j.address?.city || j.address?.municipality || j.display_name?.split(',')[0] || '–';
-  } catch { return '–'; }
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-//  FROST – FØRDE PLU historical
-// ──────────────────────────────────────────────────────────────────────────
-async function getFrostPrecip(hours = 24) {
-  const now  = new Date();
-  const from = new Date(now - hours * 3600e3);
-  const fmt  = d => d.toISOString().replace(/\.\d+Z$/, 'Z');
-  const path = `/observations/v0.jsonld?sources=${STATION.id}:0`
-             + `&elements=${encodeURIComponent('sum(precipitation_amount PT1H)')}`
-             + `&referencetime=${encodeURIComponent(fmt(from) + '/' + fmt(now))}`
-             + `&timeresolutions=PT1H`;
-  const r = await fetch('https://frost.met.no' + path, { headers: { Authorization: FROST_AUTH } });
-  const j = await r.json();
-  if (j.error) return [];
-  const pts = [];
-  for (const rec of (j.data || []))
-    for (const obs of (rec.observations || []))
-      pts.push({ t: new Date(rec.referenceTime), v: obs.value ?? 0 });
-  return pts.sort((a, b) => a.t - b.t);
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-//  CHART HELPERS
-// ──────────────────────────────────────────────────────────────────────────
-function destroyCharts() {
-  if (chartFc)    { chartFc.destroy();    chartFc    = null; }
-  if (chartHist)  { chartHist.destroy();  chartHist  = null; }
-  if (chartFrost) { chartFrost.destroy(); chartFrost = null; }
-}
-
-function barChart(id, labels, data, color, yLabel, threshold) {
-  const ctx = document.getElementById(id).getContext('2d');
-  const datasets = [
-    { data, backgroundColor: color + 'bb', borderColor: color, borderWidth: 1, borderRadius: 2 },
-  ];
-  if (threshold != null) {
-    datasets.push({
-      type: 'line',
-      data: data.map(() => threshold),
-      borderColor: '#e94560',
-      borderWidth: 1.5,
-      borderDash: [5, 3],
-      pointRadius: 0,
-      fill: false,
-      label: `Terskel ${threshold} mm`,
-    });
-  }
-  return new Chart(ctx, {
-    type: 'bar',
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: !!threshold, labels: { color: '#8b949e', font: { size: 8 }, boxWidth: 16 } } },
-      scales: {
-        x: { ticks: { color: '#8b949e', maxTicksLimit: 8, maxRotation: 0, font: { size: 8 } }, grid: { display: false } },
-        y: { ticks: { color: '#8b949e', font: { size: 8 } }, grid: { color: '#21262d' }, min: 0,
-             title: { display: !!yLabel, text: yLabel, color: '#8b949e', font: { size: 8 } } },
-      },
-    },
-  });
-}
-
-// ──────────────────────────────────────────────────────────────────────────
 //  VARSLING – terskellogikk
 // ──────────────────────────────────────────────────────────────────────────
-function getScenario(sm) {
-  if (!sm) return null;
-  if (sm.midPct >= 70) return { no: 1, threshH: 10, threshD: 40 }; // 70-80% og >80%
-  return             { no: 2, threshH: 15, threshD: 60 };           // <70% – tørr jord
+// Scenario bestemmes av VÅTESTE celle i området.
+// Beredskapsplanen: «Når EN celle innenfor avgrensingen får en vannmetningsgrad
+// på 70–80 %» gjelder Scenario 1 – altså er det maksimum, ikke snittet, som styrer.
+function getScenarioFromMax(maxPct) {
+  if (maxPct == null) return null;
+  return maxPct >= 70
+    ? { no: 1, threshH: 10, threshD: 40 }   // fuktig jord
+    : { no: 2, threshH: 15, threshD: 60 };  // tørrere jord – krever mer nedbør
 }
 
-// historiskDato: satt (yyyy-mm-dd) når rapporten gjelder en dato før i dag –
-// da er p24h observert døgnnedbør for datoen og p1h utilgjengelig (null).
-function renderAlert(sm, p1h, p24h, historiskDato) {
-  const alertEl = document.getElementById('r-alert');
-  const sc = getScenario(sm);
-  if (!sc || (p1h == null && p24h == null)) { alertEl.style.display = 'none'; return; }
-  alertEl.style.display = '';
-
-  const excH  = p1h  != null && p1h  >= sc.threshH;
-  const excD  = p24h != null && p24h >= sc.threshD;
-  const nearH = p1h  != null && p1h  >= sc.threshH * 0.5;
-  const nearD = p24h != null && p24h >= sc.threshD * 0.5;
-
-  let bg, textColor, icon, statusTxt;
-  if (excH || excD) {
-    bg = '#3d0f0f'; textColor = '#ff6b6b'; icon = '🔴'; statusTxt = 'TERSKEL OVERSKREDET';
-  } else if (nearH || nearD) {
-    bg = '#2d2500'; textColor = '#f5c000'; icon = '🟡'; statusTxt = 'NÆRMER SEG TERSKEL';
-  } else {
-    bg = '#0d2818'; textColor = '#40c463'; icon = '🟢'; statusTxt = 'UNDER TERSKEL';
-  }
-
-  const kilde  = historiskDato ? `Observert ${historiskDato}` : 'Prognose';
-  const smDesc = sm ? `${sm.label} (${sm.desc})` : '–';
-  const warns = [
-    excH ? `⚠ ${kilde} 1t: <b>${p1h.toFixed(1)} mm/t</b> — terskel ${sc.threshH} mm/t` : '',
-    excD ? `⚠ ${kilde} 24t: <b>${p24h.toFixed(0)} mm</b> — terskel ${sc.threshD} mm` : '',
-  ].filter(Boolean);
-
-  const histNote = historiskDato
-    ? `<div style="font-size:9px;color:#8b949e;margin-top:4px">Historisk dato – observert døgnnedbør (seNorge) er brukt. Timesintensitet utilgjengelig.</div>`
-    : '';
-
-  document.getElementById('r-alert-body').innerHTML = `
-    <div class="alert-box" style="background:${bg}">
-      <div class="alert-status" style="color:${textColor}">${icon} ${statusTxt}</div>
-      <div class="alert-meta">
-        Scenario ${sc.no} aktivt · Vannmetning: ${smDesc}<br>
-        Terskler: <b>${sc.threshH} mm/t</b> · <b>${sc.threshD} mm/døgn</b>
-        ${historiskDato && p24h != null ? `<br>Observert døgnnedbør ${historiskDato}: <b>${p24h.toFixed(1)} mm</b>` : ''}
-      </div>
-      ${warns.map(w => `<div class="alert-warn" style="color:${textColor}">${w}</div>`).join('')}
-      ${histNote}
-    </div>
-    <div style="font-size:9px;color:#484f58;margin-top:3px">
-      Scenario 1 (≥70 %): 10 mm/t, 40 mm/d &nbsp;|&nbsp; Scenario 2 (&lt;70 %): 15 mm/t, 60 mm/d
-    </div>`;
-}
-
-// Observert døgnnedbør (seNorge rutenett) for én bestemt dato via gts-proxyen.
-// seNorge-døgnet «D» (D kl 06/08 → D+1) er stemplet D+1 i gts – hent den raden.
-async function getObservedRr(lat, lon, isoDate) {
+// Døgnnedbør fra seNorge-rutenettet for ett punkt og én dato, via gts-proxyen.
+// seNorge-døgnet «D» (D kl 08 → D+1 kl 08) er stemplet D+1 i gts – hent den raden.
+async function getRrPunkt(lat, lon, isoDate) {
   try {
     const stamp = addDaysISO(isoDate, 1);
     const { x, y } = latLonToUTM33(lat, lon);
@@ -800,7 +505,7 @@ async function getObservedRr(lat, lon, isoDate) {
     const text = await resp.text();
     if (!resp.ok || text.includes('ErrorMessage') || text.includes('No cell exists')) return null;
     const lines = text.trim().split('\n').filter(l => !l.startsWith('#') && l.includes(';'));
-    lines.shift(); // header
+    lines.shift();
     const v = parseFloat(lines[0]?.split(';')[1]);
     return isNaN(v) ? null : v;
   } catch {
@@ -811,22 +516,26 @@ async function getObservedRr(lat, lon, isoDate) {
 // ──────────────────────────────────────────────────────────────────────────
 //  AREALRAPPORT – vannmetningsfordeling over Fv609-rektangelet
 // ──────────────────────────────────────────────────────────────────────────
-// Rutenettstørrelse for arealutvalget (7×5 = 35 punkter over AREA_RECT)
+// Rutenett for arealutvalget. Vannmetning bruker 7×5 = 35 punkter (billige
+// bildekall), nedbør et grovere 5×3 = 15 (ett proxy-kall per punkt).
 const AREA_GRID_ROWS = 5, AREA_GRID_COLS = 7;
+const RR_GRID_ROWS   = 3, RR_GRID_COLS   = 5;
 
-async function getAreaSm() {
-  // Rutenettsutvalg av punkter innenfor AREA_RECT.
-  // Gjenbruker getSmPixel() som er bevist korrekt for enkeltpunkter.
+// Jevnt fordelte punkter innenfor AREA_RECT
+function arealPunkter(rows, cols) {
   const nv = AREA_RECT.bounds[0]; // [lat, lon] NV
   const so = AREA_RECT.bounds[1]; // [lat, lon] SØ
+  const latStep = (nv[0] - so[0]) / (rows + 1);
+  const lonStep = (so[1] - nv[1]) / (cols + 1);
+  const p = [];
+  for (let r = 1; r <= rows; r++)
+    for (let c = 1; c <= cols; c++)
+      p.push([nv[0] - r * latStep, nv[1] + c * lonStep]);
+  return p;
+}
 
-  const latStep = (nv[0] - so[0]) / (AREA_GRID_ROWS + 1);
-  const lonStep = (so[1] - nv[1]) / (AREA_GRID_COLS + 1);
-
-  const punkter = [];
-  for (let r = 1; r <= AREA_GRID_ROWS; r++)
-    for (let c = 1; c <= AREA_GRID_COLS; c++)
-      punkter.push([nv[0] - r * latStep, nv[1] + c * lonStep]);
+async function getAreaSm() {
+  const punkter = arealPunkter(AREA_GRID_ROWS, AREA_GRID_COLS);
 
   // Hent alle parallelt – allSettled slik at ett feilet punkt ikke velter alt
   const resultater = await Promise.allSettled(
@@ -834,64 +543,101 @@ async function getAreaSm() {
   );
 
   const counts = Object.fromEntries(SM_COLORS.map(c => [c.label, 0]));
-  let noData = 0;
+  let noData = 0, maxPct = null;
   for (const res of resultater) {
     const cls = res.status === 'fulfilled' ? res.value : null;
-    if (cls) counts[cls.label]++;
-    else noData++;
+    if (cls) {
+      counts[cls.label]++;
+      if (maxPct == null || cls.midPct > maxPct) maxPct = cls.midPct;
+    } else noData++;
   }
 
   const dataPx = resultater.length - noData;
-  return { counts, dataPx, total: resultater.length };
+  return { counts, dataPx, total: resultater.length, maxPct };
+}
+
+// Døgnnedbør over området for valgt dato – min/middel/maks fra rutenettet
+async function getAreaRr(isoDate) {
+  const punkter = arealPunkter(RR_GRID_ROWS, RR_GRID_COLS);
+  const res = await Promise.allSettled(
+    punkter.map(([lat, lon]) => getRrPunkt(lat, lon, isoDate))
+  );
+  const verdier = res
+    .map(r => (r.status === 'fulfilled' ? r.value : null))
+    .filter(v => v != null);
+  if (!verdier.length) return null;
+  return {
+    maks:   Math.max(...verdier),
+    middel: verdier.reduce((s, v) => s + v, 0) / verdier.length,
+    min:    Math.min(...verdier),
+    n:      verdier.length,
+  };
+}
+
+// Maks timesintensitet fra YR innenfor seNorge-døgnet (D kl 08 → D+1 kl 08).
+// Kun mulig for i dag/fremover – YR har ingen historikk.
+async function getAreaTimesMaks(isoDate) {
+  if (isoDate < todayISO()) return null;
+  // Tre punkter på tvers av rektangelet – nedbørbyger kan treffe ulikt
+  const nv = AREA_RECT.bounds[0], so = AREA_RECT.bounds[1];
+  const midLat = (nv[0] + so[0]) / 2;
+  const punkter = [
+    [midLat, nv[1] + (so[1] - nv[1]) * 0.2],
+    [midLat, (nv[1] + so[1]) / 2],
+    [midLat, nv[1] + (so[1] - nv[1]) * 0.8],
+  ];
+
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const fra = new Date(y, m - 1, d, 8, 0, 0);       // lokal kl. 08
+  const til = new Date(y, m - 1, d + 1, 8, 0, 0);
+
+  const res = await Promise.allSettled(
+    punkter.map(([lat, lon]) => getForecast(lat, lon))
+  );
+
+  let maks = null, treff = 0;
+  for (const r of res) {
+    if (r.status !== 'fulfilled' || !r.value) continue;
+    for (const t of (r.value.properties?.timeseries || [])) {
+      const tid = new Date(t.time);
+      if (tid < fra || tid >= til) continue;
+      const mm = t.data?.next_1_hours?.details?.precipitation_amount;
+      if (mm == null) continue;
+      treff++;
+      if (maks == null || mm > maks) maks = mm;
+    }
+  }
+  return treff ? { maks, timer: treff } : null;
 }
 
 let arealSeq = 0; // sekvensnummer – forkaster utdaterte svar ved raske datoklikk
 
 async function lastArealrapport() {
   const seq = ++arealSeq;
-  document.getElementById('area-loading').style.display  = 'flex';
-  document.getElementById('area-content').style.display  = 'none';
+  document.getElementById('area-loading').style.display = 'flex';
+  document.getElementById('area-content').style.display = 'none';
 
-  const dato = calValue('sm');
-  document.getElementById('area-dato-lbl').textContent = `Dato: ${dato} · seNorge ODM/HBV 1×1 km`;
+  const dato = calValue('dato');
+  const erHistorisk = dato < todayISO();
+  document.getElementById('area-dato-lbl').textContent =
+    `${dato} · ${erHistorisk ? 'observert' : 'prognose'} · seNorge 1×1 km`;
 
   try {
-    const { counts, dataPx, total } = await getAreaSm();
+    const [smRes, rrRes, timeRes] = await Promise.allSettled([
+      getAreaSm(),
+      getAreaRr(dato),
+      getAreaTimesMaks(dato),
+    ]);
     if (seq !== arealSeq) return; // nyere kall pågår – forkast dette svaret
 
-    // Finn dominerende klasse (ekskluder grå "Under 60%" for varslingsnivå)
-    const fuktige = SM_COLORS.filter(c => c.midPct >= 70);
-    const fuktigPx = fuktige.reduce((s, c) => s + (counts[c.label] || 0), 0);
-    const fuktigPct = dataPx > 0 ? fuktigPx / dataPx * 100 : 0;
+    const sm    = smRes.status   === 'fulfilled' ? smRes.value   : null;
+    const rr    = rrRes.status   === 'fulfilled' ? rrRes.value   : null;
+    const tMaks = timeRes.status === 'fulfilled' ? timeRes.value : null;
+    if (!sm) throw new Error('ingen vannmetningsdata');
 
-    // Dominerende klasse totalt
-    let domKls = null, domAnt = 0;
-    for (const cls of SM_COLORS) {
-      if ((counts[cls.label] || 0) > domAnt) { domAnt = counts[cls.label]; domKls = cls; }
-    }
+    const { counts, dataPx, total, maxPct } = sm;
 
-    // Varslingsstatus basert på areal
-    const sc = domKls ? getScenario(domKls) : null;
-    let varselHtml = '';
-    if (sc && fuktigPct > 5) {
-      const bg = fuktigPct > 30 ? '#3d0f0f' : '#2d2500';
-      const fc = fuktigPct > 30 ? '#ff6b6b' : '#f5c000';
-      const ik = fuktigPct > 30 ? '🔴' : '🟡';
-      varselHtml = `
-        <div class="areal-varsel" style="background:${bg}">
-          <div class="av-status" style="color:${fc}">${ik} ${fuktigPct.toFixed(0)} % av landarealet ≥ 70 % fuktig</div>
-          <div class="av-meta">Scenario ${sc.no} aktivt · Terskel ${sc.threshH} mm/t · ${sc.threshD} mm/d</div>
-        </div>`;
-    } else {
-      varselHtml = `
-        <div class="areal-varsel" style="background:#0d2818">
-          <div class="av-status" style="color:#40c463">🟢 Under terskel</div>
-          <div class="av-meta">${fuktigPct.toFixed(0)} % av landarealet ≥ 70 % fuktig</div>
-        </div>`;
-    }
-    document.getElementById('area-varsel').innerHTML = varselHtml;
-
-    // Søylediagram
+    // ── 1. Vannmetning: fordeling av landareal ──
     let barsHtml = '';
     for (const cls of SM_COLORS) {
       const n   = counts[cls.label] || 0;
@@ -909,7 +655,38 @@ async function lastArealrapport() {
     document.getElementById('area-bars').innerHTML = barsHtml;
     const dekning = total > 0 ? (dataPx / total * 100).toFixed(0) : 0;
     document.getElementById('area-kilde').textContent =
-      `Av kartlagt landareal (${dekning} % av rektangelet) · ${dataPx} piksler · Vann/fjell telt ut`;
+      `${dataPx} av ${total} rutepunkter har data (${dekning} % – vann og fjell utenfor modellen er telt ut)`;
+
+    // ── 2. Nedbør over området ──
+    const sc = getScenarioFromMax(maxPct);
+    const farge = (v, terskel) =>
+      v >= terskel ? '#ff6b6b' : v >= terskel * 0.5 ? '#f5c000' : '#58a6ff';
+
+    document.getElementById('area-rr').innerHTML = rr ? `
+      <div class="rr-grid">
+        <div class="rr-cell">
+          <div class="rv" style="color:${sc ? farge(rr.maks, sc.threshD) : '#58a6ff'}">${rr.maks.toFixed(1)}</div>
+          <div class="rl">maks mm/døgn</div>
+        </div>
+        <div class="rr-cell">
+          <div class="rv">${rr.middel.toFixed(1)}</div>
+          <div class="rl">middel mm/døgn</div>
+        </div>
+        <div class="rr-cell">
+          <div class="rv" style="color:${tMaks && sc ? farge(tMaks.maks, sc.threshH) : '#58a6ff'}">${tMaks ? tMaks.maks.toFixed(1) : '–'}</div>
+          <div class="rl">maks mm/time</div>
+        </div>
+      </div>
+      <div class="rr-note">
+        Døgnnedbør fra seNorge-rutenettet (${rr.n} punkter, kl. 08–08).
+        ${tMaks
+          ? 'Timesintensitet er høyeste time fra YR-varselet i samme døgn.'
+          : 'Timesintensitet er ikke tilgjengelig for historiske datoer – YR har kun varsel framover.'}
+      </div>` : `
+      <div style="font-size:11px;color:#8b949e">Ingen nedbørsdata for ${dato}.</div>`;
+
+    // ── 3. Varslingsstatus – bygget på arealtallene over ──
+    renderArealVarsel(sc, maxPct, rr, tMaks, erHistorisk);
 
     document.getElementById('area-loading').style.display = 'none';
     document.getElementById('area-content').style.display = 'block';
@@ -921,239 +698,52 @@ async function lastArealrapport() {
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-//  SHOW / HIDE SECTIONS
-// ──────────────────────────────────────────────────────────────────────────
-function showSections(ids) {
-  for (const id of ['r-loc','r-alert','r-sm','r-fc','r-hist','r-frost'])
-    document.getElementById(id).style.display = ids.includes(id) ? '' : 'none';
-  document.getElementById('report-empty').style.display = ids.length ? 'none' : '';
-}
-
-function setLoading(id) {
-  document.getElementById(id).innerHTML = '<span class="spinner"></span>';
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-//  GENERATE REPORT
-// ──────────────────────────────────────────────────────────────────────────
-let reportSeq = 0; // forkaster utdaterte svar ved raske kartklikk
-
-async function generateReport(lat, lon) {
-  // Read from inputs if not provided
-  if (lat === undefined) {
-    lat = parseFloat(document.getElementById('inp-lat').value);
-    lon = parseFloat(document.getElementById('inp-lon').value);
+// Varslingsstatus for hele overvåkningsområdet.
+// Scenario styres av våteste celle; nedbøren av verste celle – begge etter
+// beredskapsplanens ordlyd om «en celle innenfor avgrensingen».
+function renderArealVarsel(sc, maxPct, rr, tMaks, erHistorisk) {
+  const el = document.getElementById('area-varsel');
+  if (!sc || !rr) {
+    el.innerHTML = '<div style="font-size:11px;color:#8b949e">Ikke nok data til å vurdere status.</div>';
+    return;
   }
-  if (isNaN(lat) || isNaN(lon)) return;
-  const seq = ++reportSeq;
 
-  // Clamp to Norway-ish range
-  lat = Math.max(57, Math.min(72, lat));
-  lon = Math.max(4,  Math.min(32, lon));
+  const excD  = rr.maks >= sc.threshD;
+  const excH  = tMaks != null && tMaks.maks >= sc.threshH;
+  const nearD = rr.maks >= sc.threshD * 0.5;
+  const nearH = tMaks != null && tMaks.maks >= sc.threshH * 0.5;
 
-  // Update inputs
-  document.getElementById('inp-lat').value = lat.toFixed(4);
-  document.getElementById('inp-lon').value = lon.toFixed(4);
-
-  // Place crosshair marker
-  if (clickMarker) map.removeLayer(clickMarker);
-  clickMarker = L.marker([lat, lon], {
-    icon: L.divIcon({ className: '', html: '<div class="click-pin"></div>', iconSize: [12,12], iconAnchor: [6,6] }),
-    zIndexOffset: 500,
-  }).addTo(map);
-
-  // YR har ingen historikk – prognosepanelet gjelder kun for i dag og fremover
-  const valgtDato = calValue('sm');
-  const erHistorisk = valgtDato < todayISO();
-
-  // Check if near Frost station
-  const distToStation = Math.hypot(lat - STATION.lat, lon - STATION.lon);
-  const nearStation   = distToStation < 0.05; // ~5 km
-
-  // Show loading state
-  destroyCharts();
-  const seksjoner = ['r-loc','r-alert','r-sm','r-hist'];
-  if (!erHistorisk) seksjoner.splice(3, 0, 'r-fc');
-  if (nearStation)  seksjoner.push('r-frost');
-  showSections(seksjoner);
-  setLoading('r-sm-body');
-  document.getElementById('r-loc-name').textContent   = '…';
-  document.getElementById('r-loc-coords').textContent = `${lat.toFixed(4)}°N  ${lon.toFixed(4)}°Ø`;
-  if (!erHistorisk) ['fc-1h','fc-24h'].forEach(id => document.getElementById(id).textContent = '…');
-  document.getElementById('r-hist-total').textContent = '…';
-
-  // Run all fetches in parallel (YR hoppes over for historiske datoer)
-  const settled = await Promise.allSettled([
-    getPlaceName(lat, lon),
-    getSmPixel(lat, lon),
-    erHistorisk ? Promise.resolve(null) : getForecast(lat, lon),
-    getHistPrecip(lat, lon),
-  ]);
-  if (seq !== reportSeq) return; // nyere klikk pågår – forkast dette svaret
-  // Eksplisitt fulfilled-sjekk: .value på en rejected er undefined, gjør det tydelig
-  const [place, smClass, forecast, hist] =
-    settled.map(r => (r.status === 'fulfilled' ? r.value : null));
-
-  // ── Location ──
-  document.getElementById('r-loc-name').textContent = place ?? '–';
-
-  // ── Vannmetning ──
-  const sm = smClass;
-  const smBody = document.getElementById('r-sm-body');
-  if (sm) {
-    const pct  = sm.midPct;
-    const date = calValue('sm');
-    smBody.innerHTML = `
-      <div class="sm-value" style="color:${sm.color}">${sm.label}</div>
-      <div class="sm-label" style="color:#8b949e">${sm.desc}</div>
-      <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${sm.color}"></div></div>
-      <div class="sm-source">Dato: ${date} · seNorge ODM/HBV 1×1 km</div>`;
+  let bg, fc, ikon, tekst;
+  if (excD || excH) {
+    bg = '#3d0f0f'; fc = '#ff6b6b'; ikon = '🔴'; tekst = 'TERSKEL OVERSKREDET';
+  } else if (nearD || nearH) {
+    bg = '#2d2500'; fc = '#f5c000'; ikon = '🟡'; tekst = 'NÆRMER SEG TERSKEL';
   } else {
-    smBody.innerHTML = `<div style="font-size:11px;color:#8b949e">Ingen data for dette punktet ${calValue('sm')} (utenfor modellområde eller hav).</div>`;
+    bg = '#0d2818'; fc = '#40c463'; ikon = '🟢'; tekst = 'UNDER TERSKEL';
   }
 
-  // ── YR Forecast ──
-  const fc  = forecast;
-  const sc  = getScenario(sm);
-  let p1h = null, p24h = null;
-  if (fc) {
-    const series = fc.properties?.timeseries || [];
-    p1h  = series[0]?.data?.next_1_hours?.details?.precipitation_amount ?? 0;
-    p24h = series.slice(0, 24).reduce((s, t) => s + (t?.data?.next_1_hours?.details?.precipitation_amount ?? 0), 0);
+  const kilde = erHistorisk ? 'Observert' : 'Varslet';
+  const advarsler = [
+    excH ? `⚠ ${kilde} timesintensitet <b>${tMaks.maks.toFixed(1)} mm/t</b> — terskel ${sc.threshH} mm/t` : '',
+    excD ? `⚠ ${kilde} døgnnedbør <b>${rr.maks.toFixed(1)} mm</b> — terskel ${sc.threshD} mm` : '',
+  ].filter(Boolean);
 
-    const cellColor = (val, thresh) =>
-      val >= thresh        ? '#ff6b6b' :
-      val >= thresh * 0.5  ? '#f5c000' : '#58a6ff';
+  const våtesteKlasse = SM_COLORS.find(c => c.midPct === maxPct);
 
-    const el1h  = document.getElementById('fc-1h');
-    const el24h = document.getElementById('fc-24h');
-    el1h.textContent  = p1h.toFixed(1);
-    el24h.textContent = p24h.toFixed(0);
-    if (sc) {
-      el1h.style.color  = cellColor(p1h,  sc.threshH);
-      el24h.style.color = cellColor(p24h, sc.threshD);
-    }
-
-    const fcSeries = series.slice(0, 48);
-    const fcLabels = fcSeries.map(s => new Date(s.time).toLocaleString('nb-NO', { weekday:'short', hour:'2-digit', minute:'2-digit' }));
-    const fcData   = fcSeries.map(s => s.data?.next_1_hours?.details?.precipitation_amount ?? 0);
-    chartFc = barChart('chart-fc', fcLabels, fcData, '#1d6fa4', 'mm/t', sc?.threshH);
-  }
-
-  // ── Varslingsstatus ──
-  // Historisk dato: kombiner datoens vannmetning med OBSERVERT nedbør for
-  // samme dato (YR-prognosen fra nå er irrelevant for etteranalyse).
-  if (erHistorisk) {
-    const obsRr = await getObservedRr(lat, lon, valgtDato);
-    if (seq !== reportSeq) return;
-    renderAlert(sm, null, obsRr, valgtDato);
-  } else {
-    renderAlert(sm, p1h, p24h);
-  }
-
-  // ── Nedbørshistorikk ──
-  const h = hist;
-  if (h && h.length) {
-    const total = h.reduce((s, p) => s + p.v, 0);
-    document.getElementById('r-hist-total').textContent = `Total: ${total.toFixed(1)} mm`;
-    const hLabels = h.map(p => `${p.dagISO.slice(8,10)}.${p.dagISO.slice(5,7)}`);
-    chartHist = barChart('chart-hist', hLabels, h.map(p => p.v), '#2171b5', 'mm');
-  } else {
-    document.getElementById('r-hist-total').textContent = 'Ikke tilgjengelig';
-  }
-
-  // ── Frost station (nearby) ──
-  if (nearStation) {
-    document.getElementById('r-frost').style.display = '';
-    setLoading('r-frost-body');
-    try {
-      const frostPts = await getFrostPrecip(24);
-      const last1h   = frostPts.at(-1)?.v ?? null;
-      const sum24h   = frostPts.reduce((s, p) => s + p.v, 0);
-      document.getElementById('r-frost-body').innerHTML = `
-        <div style="font-size:11px;color:#8b949e;margin-bottom:6px">
-          Siste time: <b style="color:#58a6ff">${last1h !== null ? last1h.toFixed(1) + ' mm' : '–'}</b>
-          &nbsp;·&nbsp; Siste 24 t: <b style="color:#58a6ff">${sum24h.toFixed(1)} mm</b>
-        </div>
-        <div style="font-size:9px;color:#6e7681">Pluviometer – timesmålinger fra MET Frost</div>`;
-    } catch {
-      document.getElementById('r-frost-body').textContent = 'Feil ved lasting av Frost-data';
-    }
-  }
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-//  GENERATE STATION REPORT (klikk direkte på stasjonmarkør)
-// ──────────────────────────────────────────────────────────────────────────
-async function generateStationReport() {
-  const { lat, lon } = { lat: STATION.lat, lon: STATION.lon };
-  const seq = ++reportSeq; // deler sekvens med generateReport – de skriver til samme panel
-  document.getElementById('inp-lat').value = lat.toFixed(4);
-  document.getElementById('inp-lon').value = lon.toFixed(4);
-
-  if (clickMarker) map.removeLayer(clickMarker);
-  clickMarker = L.marker([lat, lon], {
-    icon: L.divIcon({ className: '', html: '<div class="click-pin"></div>', iconSize:[12,12], iconAnchor:[6,6] }),
-    zIndexOffset: 500,
-  }).addTo(map);
-
-  destroyCharts();
-  showSections(['r-loc','r-frost','r-fc']);
-  document.getElementById('r-loc-name').textContent   = STATION.name;
-  document.getElementById('r-loc-coords').textContent = `${lat.toFixed(4)}°N  ${lon.toFixed(4)}°Ø`;
-  setLoading('r-frost-body');
-  ['fc-1h','fc-24h'].forEach(id => document.getElementById(id).textContent = '…');
-
-  const [frostRes, forecastRes] = await Promise.allSettled([
-    getFrostPrecip(48),
-    getForecast(lat, lon),
-  ]);
-  if (seq !== reportSeq) return; // nyere rapport pågår – forkast
-
-  // ── Frost data ──
-  const pts = (frostRes.status === 'fulfilled' ? frostRes.value : null) || [];
-  if (pts.length) {
-    const last1h = pts.at(-1)?.v ?? null;
-    const sum24h = pts.slice(-24).reduce((s, p) => s + p.v, 0);
-    const sum48h = pts.reduce((s, p) => s + p.v, 0);
-    document.getElementById('r-frost-body').innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;text-align:center">
-        <div>
-          <div style="font-size:20px;font-weight:700;color:#58a6ff">${last1h !== null ? last1h.toFixed(1) : '–'}</div>
-          <div style="font-size:9px;color:#8b949e">mm siste 1t</div>
-        </div>
-        <div>
-          <div style="font-size:20px;font-weight:700;color:#58a6ff">${sum24h.toFixed(1)}</div>
-          <div style="font-size:9px;color:#8b949e">mm siste 24t</div>
-        </div>
-        <div>
-          <div style="font-size:20px;font-weight:700;color:#58a6ff">${sum48h.toFixed(1)}</div>
-          <div style="font-size:9px;color:#8b949e">mm siste 48t</div>
-        </div>
+  el.innerHTML = `
+    <div class="alert-box" style="background:${bg}">
+      <div class="alert-status" style="color:${fc}">${ikon} ${tekst}</div>
+      <div class="alert-meta">
+        <b>Scenario ${sc.no}</b> – våteste celle i området: ${våtesteKlasse ? våtesteKlasse.label : '–'}<br>
+        Terskler: <b>${sc.threshH} mm/t</b> · <b>${sc.threshD} mm/døgn</b><br>
+        Høyeste i området: ${rr.maks.toFixed(1)} mm/døgn${tMaks ? ` · ${tMaks.maks.toFixed(1)} mm/t` : ''}
       </div>
-      <div style="font-size:9px;color:#6e7681">Pluviometer · MET Frost · timesmålinger</div>`;
-    const labels = pts.map(p =>
-      p.t.toLocaleString('nb-NO', { weekday:'short', hour:'2-digit', minute:'2-digit' })
-    );
-    chartFrost = barChart('chart-frost', labels, pts.map(p => p.v), '#58a6ff', 'mm/t');
-  } else {
-    document.getElementById('r-frost-body').textContent = 'Ingen data fra Frost';
-  }
-
-  // ── YR forecast ──
-  const fc = forecastRes.status === 'fulfilled' ? forecastRes.value : null;
-  if (fc) {
-    const series = fc.properties?.timeseries || [];
-    const p1h  = series[0]?.data?.next_1_hours?.details?.precipitation_amount ?? 0;
-    const p24h = series.slice(0,24).reduce((s,t) => s+(t?.data?.next_1_hours?.details?.precipitation_amount??0),0);
-    document.getElementById('fc-1h').textContent  = p1h.toFixed(1);
-    document.getElementById('fc-24h').textContent = p24h.toFixed(0);
-    const fcSeries = series.slice(0,48);
-    const fcLabels = fcSeries.map(s => new Date(s.time).toLocaleString('nb-NO',{weekday:'short',hour:'2-digit',minute:'2-digit'}));
-    const fcData   = fcSeries.map(s => s.data?.next_1_hours?.details?.precipitation_amount ?? 0);
-    chartFc = barChart('chart-fc', fcLabels, fcData, '#1d6fa4', 'mm/t');
-  }
+      ${advarsler.map(a => `<div class="alert-warn" style="color:${fc}">${a}</div>`).join('')}
+    </div>
+    <div class="rr-note">
+      Scenario 1 (våteste celle ≥ 70 %): 10 mm/t, 40 mm/d &nbsp;|&nbsp;
+      Scenario 2 (under 70 %): 15 mm/t, 60 mm/d
+    </div>`;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -1167,7 +757,6 @@ function addStationMarker() {
   });
   const m = L.marker([STATION.lat, STATION.lon], { icon, zIndexOffset: 1000 });
   m.bindTooltip(`<b>${STATION.name}</b><br>${STATION.id} · Nedbørsstasjon`, { direction: 'top', offset: [0,-8] });
-  m.on('click', e => { L.DomEvent.stopPropagation(e); generateStationReport(); });
   m.addTo(map);
 }
 
@@ -1233,13 +822,13 @@ function calSelect(id, iso) {
   calState[id].value = iso;
   document.getElementById('cal-label-' + id).textContent = iso;
   calClose(id);
-  if (id === 'sm') updateSmLayer();
-  if (id === 'rr') updateRrLayer();
+  // Én felles dato styrer begge kartlagene og arealrapporten
+  updateSmLayer();
+  updateRrLayer();
+  lastArealrapport();
 }
 
 function calOpen(id) {
-  // Close any other open calendars
-  ['sm','rr'].forEach(other => { if (other !== id) calClose(other); });
   const popup = document.getElementById('cal-popup-' + id);
   popup.classList.toggle('open');
 }
@@ -1255,8 +844,8 @@ function calInit(id, isoValue) {
   document.getElementById('cal-label-' + id).textContent = isoValue;
 }
 
-// Close calendars when clicking outside
-document.addEventListener('click', () => { calClose('sm'); calClose('rr'); });
+// Close calendar when clicking outside
+document.addEventListener('click', () => calClose('dato'));
 
 // Helper: get current selected date for a calendar (replaces input.value reads)
 function calValue(id) { return calState[id]?.value || todayISO(); }
@@ -1265,9 +854,8 @@ function calValue(id) { return calState[id]?.value || todayISO(); }
 //  INIT
 // ──────────────────────────────────────────────────────────────────────────
 function init() {
-  const today  = todayISO();
-  calInit('sm', today);
-  calInit('rr', today);
+  const today = todayISO();
+  calInit('dato', today);
 
   map = L.map('map').setView([61.4387, 5.5463], 13);
 
@@ -1292,14 +880,8 @@ function init() {
   }).addTo(map);
   areaRect.bindTooltip(AREA_RECT.label, { sticky: true });
 
-  // Click on map → generate report
-  map.on('click', e => generateReport(e.latlng.lat, e.latlng.lng));
-
   // Last arealrapport ved oppstart
   lastArealrapport();
-
-  // Default punktrapport ved oppstart
-  generateReport(61.4387, 5.5463);
 }
 
 init();

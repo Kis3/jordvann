@@ -1,0 +1,10 @@
+Nødvendige Python-pakker:
+  pip install requests pandas matplotlib
+
+Valgfritt (for nøyaktig UTM-konvertering):
+  pip install pyproj
+
+Kjør rapporten:
+  python generer_rapport.py
+
+PDF-filen lagres i samme mappe og åpnes automatisk.

@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="UTF-8">
+<title>Skredvarsel Fv609 – Historisk terskelrapport</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #f4f6f9; color: #1a1a2e; }
+
+  /* Skjermvisning */
+  #laster { display:flex; flex-direction:column; align-items:center; justify-content:center;
+            height:100vh; gap:16px; background:#0d1117; color:#c9d1d9; }
+  .spinner { width:48px;height:48px;border:4px solid #30363d;border-top-color:#58a6ff;
+             border-radius:50%;animation:spin 0.8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  #feil { display:none; text-align:center; color:#ff6b6b; padding:40px; }
+
+  /* Rapport-layout */
+  #rapport { display:none; max-width:1100px; margin:0 auto; padding:24px 20px 60px; }
+
+  .side { background:white; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,0.08);
+          padding:32px 36px; margin-bottom:28px; }
+
+  h1 { font-size:26px; color:#0d1117; margin-bottom:6px; }
+  .undertittel { color:#6e7681; font-size:14px; margin-bottom:20px; }
+  h2 { font-size:16px; color:#1a1a2e; margin-bottom:14px; border-bottom:2px solid #e8ecf0;
+       padding-bottom:8px; }
+  h3 { font-size:13px; color:#444; margin-bottom:10px; }
+
+  /* Sammendragskort */
+  .kort-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+  .kort { border-radius:8px; padding:16px; text-align:center; }
+  .kort .tall { font-size:32px; font-weight:700; }
+  .kort .etikett { font-size:11px; color:#6e7681; margin-top:4px; }
+  .kort.gronn  { background:#e6f4ea; } .kort.gronn .tall  { color:#1a7f37; }
+  .kort.gul    { background:#fff8e1; } .kort.gul .tall    { color:#b08800; }
+  .kort.rod    { background:#fdecea; } .kort.rod .tall    { color:#c62828; }
+  .kort.bla    { background:#e8f0fe; } .kort.bla .tall    { color:#1a56db; }
+
+  /* Terskelboks */
+  .terskel-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+  .terskel-boks { border-radius:8px; padding:16px; border:2px solid; }
+  .terskel-boks.sc1 { background:#fff8e1; border-color:#f5c000; }
+  .terskel-boks.sc2 { background:#fdecea; border-color:#e94560; }
+  .terskel-boks h4 { font-size:13px; margin-bottom:8px; }
+  .terskel-boks p  { font-size:12px; color:#444; line-height:1.6; }
+
+  /* Grafer */
+  .graf-wrap { position:relative; height:220px; margin-bottom:8px; }
+  .graf-lbl  { font-size:10px; color:#8b949e; margin-bottom:4px; }
+
+  /* Tabell */
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { background:#f0f2f5; color:#444; padding:8px 10px; text-align:left;
+       border-bottom:2px solid #dde1e7; font-weight:600; }
+  td { padding:7px 10px; border-bottom:1px solid #eaecef; }
+  tr:nth-child(even) td { background:#f8f9fb; }
+  tr:hover td { background:#eef1f6; }
+  .merket { font-weight:700; color:#c62828; }
+  .sc2-rad td { background:#fff0f0 !important; }
+
+  /* Status-badge */
+  .badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px;
+           font-weight:600; }
+  .badge.rod  { background:#fdecea; color:#c62828; }
+  .badge.gul  { background:#fff8e1; color:#b08800; }
+
+  /* Print-knapp */
+  #print-knapp { position:fixed; bottom:24px; right:24px; background:#1f6feb; color:white;
+                 border:none; padding:12px 22px; border-radius:8px; cursor:pointer;
+                 font-size:14px; font-weight:600; box-shadow:0 4px 12px rgba(0,0,0,0.2);
+                 z-index:100; }
+  #print-knapp:hover { background:#388bfd; }
+
+  /* Print */
+  @media print {
+    body { background:white; }
+    #print-knapp { display:none; }
+    .side { box-shadow:none; border:1px solid #dde1e7; margin-bottom:0; border-radius:0;
+            page-break-after:always; }
+    .side:last-child { page-break-after:auto; }
+    @page { margin:15mm; size:A4 landscape; }
+  }
+</style>
+</head>
+<body>
+
+<div id="laster">
+  <div class="spinner"></div>
+  <div id="laster-tekst">Henter data fra Frost API …</div>
+</div>
+<div id="feil"></div>
+
+<div id="rapport"></div>
+<button id="print-knapp" onclick="window.print()" style="display:none">🖨 Skriv ut / Lagre PDF</button>
+
+<script>
+// ─── Konfig ──────────────────────────────────────────────────────────────────
+const CLIENT_ID   = 'ff18c1d5-0abc-4af7-bccb-e4e3fe8ff3ad';
+const STATION_ID  = 'SN57480';
+const STATION_NAME= 'Botnen i Førde (SN57480)';
+const GTS_PROXY   = 'https://skredvarsel-fv609.vercel.app/api/gts';
+const LAT = 61.4387, LON = 5.5463;
+
+const SC1 = { no:1, threshH:10, threshD:40, farge:'#f5c000', desc:'Fuktig jord (≥70 % vannmetning)' };
+const SC2 = { no:2, threshH:15, threshD:60, farge:'#e94560', desc:'Tørr jord (<70 % vannmetning)' };
+
+// ─── UTM33N ──────────────────────────────────────────────────────────────────
+function latLonToUTM33(lat, lon) {
+  const R=6378137, REF_LAT=61.46, REF_LON=5.85, REF_X=326000, REF_Y=6820000;
+  const dx = (lon-REF_LON)*Math.cos(lat*Math.PI/180)*111320;
+  const dy = (lat-REF_LAT)*111320;
+  return { x: Math.round(REF_X+dx), y: Math.round(REF_Y+dy) };
+}
+
+// ─── Data ────────────────────────────────────────────────────────────────────
+function setStatus(tekst) { document.getElementById('laster-tekst').textContent = tekst; }
+
+async function hentFrost() {
+  // SN57480 har kun daglige verdier (P1D) – ingen timesdata tilgjengelig
+  setStatus('Henter daglige nedbørsverdier fra Frost API …');
+  const now = new Date(), fra = new Date(now - 365*24*3600e3);
+  const fmt = d => d.toISOString().replace(/\.\d+Z$/, 'Z');
+  const url = `https://frost.met.no/observations/v0.jsonld`
+    + `?sources=${STATION_ID}:0`
+    + `&elements=${encodeURIComponent('sum(precipitation_amount P1D)')}`
+    + `&referencetime=${encodeURIComponent(fmt(fra)+'/'+fmt(now))}`
+    + `&limit=10000`;
+  const r = await fetch(url, { headers: { Authorization: 'Basic '+btoa(CLIENT_ID+':') } });
+  const j = await r.json();
+  if (j.error) throw new Error('Frost: ' + (j.error.reason || JSON.stringify(j.error)));
+  const recs = {};
+  for (const rec of (j.data||[])) {
+    const dag = rec.referenceTime.slice(0,10);
+    recs[dag] = { dag, mmStasjon: rec.observations[0].value ?? 0 };
+  }
+  return Object.values(recs).sort((a,b)=>a.dag.localeCompare(b.dag));
+}
+
+async function hentGTS() {
+  setStatus('Henter døgnnedbør fra seNorge …');
+  const now = new Date(), fra = new Date(now - 365*24*3600e3);
+  const { x, y } = latLonToUTM33(LAT, LON);
+  const start = fra.toISOString().slice(0,10), end = now.toISOString().slice(0,10);
+  const r = await fetch(`${GTS_PROXY}?x=${x}&y=${y}&start=${start}&end=${end}`);
+  const text = await r.text();
+  if (text.includes('ErrorMessage')) return {};
+  const lines = text.split('\n').filter(l => !l.startsWith('#') && l.includes(';'));
+  lines.shift();
+  const recs = {};
+  for (const l of lines) {
+    const [ds, vs] = l.split(';');
+    try {
+      const [d,m,yr] = ds.trim().split(' ')[0].split('.');
+      const dag = `${yr}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+      recs[dag] = parseFloat(vs.trim());
+    } catch(e) {}
+  }
+  return recs;
+}
+
+// ─── Analyse ─────────────────────────────────────────────────────────────────
+function analyser(frost, gts) {
+  const alle = [...new Set([...frost.map(f=>f.dag), ...Object.keys(gts)])].sort();
+  const frostMap = Object.fromEntries(frost.map(f=>[f.dag,f]));
+  return alle.map(dag => {
+    const mmStasjon = frostMap[dag]?.mmStasjon ?? 0;
+    const mmD = gts[dag] ?? 0;
+    // Timesterskel kan ikke sjekkes (SN57480 mangler timesdata)
+    const sc1d = mmD >= SC1.threshD || mmStasjon >= SC1.threshD;
+    const sc2d = mmD >= SC2.threshD || mmStasjon >= SC2.threshD;
+    return { dag, mmStasjon, mmD, sc1d, sc1: sc1d, sc2d, sc2: sc2d };
+  });
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function norskDato(iso) {
+  const [yr,m,d] = iso.split('-');
+  return `${d}.${m}.${yr}`;
+}
+function maanedNavn(iso) {
+  const mn = ['jan','feb','mar','apr','mai','jun','jul','aug','sep','okt','nov','des'];
+  return mn[parseInt(iso.slice(5,7))-1] + ' ' + iso.slice(2,4);
+}
+
+function genererRapport(data) {
+  const sc1dager = data.filter(d=>d.sc1).length;
+  const sc2dager = data.filter(d=>d.sc2).length;
+  const maxTime  = null; // Ikke tilgjengelig – SN57480 mangler timesdata
+  const maxDogn  = Math.max(...data.map(d=>d.mmD));
+  const periodeF = norskDato(data[0].dag), periodeT = norskDato(data[data.length-1].dag);
+  const genDato  = new Date().toLocaleString('nb-NO',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  // Månedlig aggregering
+  const maaneder = {};
+  for (const d of data) {
+    const mk = d.dag.slice(0,7);
+    if (!maaneder[mk]) maaneder[mk] = { sc1:0, sc2:0, sumD:0, sumStasjon:0 };
+    if (d.sc1) maaneder[mk].sc1++;
+    if (d.sc2) maaneder[mk].sc2++;
+    maaneder[mk].sumD += d.mmD;
+    maaneder[mk].sumStasjon += d.mmStasjon;
+  }
+  const mnKeys = Object.keys(maaneder).sort();
+
+  const rapport = document.getElementById('rapport');
+  rapport.innerHTML = `
+
+  <!-- SIDE 1: Forside & sammendrag -->
+  <div class="side">
+    <h1>Skredvarsel Fv 609 Heilevang</h1>
+    <div class="undertittel">Historisk analyse av terskloverskridelser for jordskred · Periode: ${periodeF} – ${periodeT}</div>
+
+    <div class="kort-grid">
+      <div class="kort rod">
+        <div class="tall">${sc1dager}</div>
+        <div class="etikett">Dager over Scenario 1-terskel</div>
+      </div>
+      <div class="kort gul">
+        <div class="tall">${sc2dager}</div>
+        <div class="etikett">Dager over Scenario 2-terskel</div>
+      </div>
+      <div class="kort gronn">
+        <div class="tall" style="font-size:18px">N/A</div>
+        <div class="etikett">Timesintensitet (kun daglige data)</div>
+      </div>
+      <div class="kort bla">
+        <div class="tall">${maxDogn.toFixed(1)}</div>
+        <div class="etikett">Høyeste døgnnedbør (mm)</div>
+      </div>
+    </div>
+
+    <div class="terskel-grid">
+      <div class="terskel-boks sc1">
+        <h4>⚠ Scenario 1 – Fuktig jord (≥70 % vannmetning)</h4>
+        <p>Terskel timeintensitet: <strong>${SC1.threshH} mm/t</strong><br>
+           Terskel døgnnedbør: <strong>${SC1.threshD} mm/døgn</strong><br>
+           Dager overskredet: <strong>${sc1dager}</strong></p>
+      </div>
+      <div class="terskel-boks sc2">
+        <h4>🔴 Scenario 2 – Tørr jord / ekstrem nedbør</h4>
+        <p>Terskel timeintensitet: <strong>${SC2.threshH} mm/t</strong><br>
+           Terskel døgnnedbør: <strong>${SC2.threshD} mm/døgn</strong><br>
+           Dager overskredet: <strong>${sc2dager}</strong></p>
+      </div>
+    </div>
+
+    <p style="font-size:11px;color:#8b949e;margin-top:8px">
+      Datakilder: MET Frost API (${STATION_NAME}) · seNorge GridTimeSeries (gts.nve.no) ·
+      Generert: ${genDato} · Norconsult Norge AS v/Torgeir Fiskum Hansvik
+    </p>
+  </div>
+
+  <!-- SIDE 2: Tidsserier -->
+  <div class="side">
+    <h2>Nedbør siste 365 dager</h2>
+    <p style="font-size:11px;color:#e67e22;margin-bottom:12px">
+      ⚠ SN57480 (Botnen i Førde) har kun daglige observasjoner. Timesterskel (${SC1.threshH}/${SC2.threshH} mm/t) kan ikke kontrolleres fra denne stasjonen.
+    </p>
+    <h3>Døgnnedbør – seNorge rutenett ved Fv609 (mm)</h3>
+    <div class="graf-wrap"><canvas id="graf-dogn"></canvas></div>
+    <h3 style="margin-top:20px">Døgnnedbør – Botnen i Førde, SN57480 (mm)</h3>
+    <div class="graf-wrap"><canvas id="graf-stasjon"></canvas></div>
+  </div>
+
+  <!-- SIDE 3: Månedlig -->
+  <div class="side">
+    <h2>Månedlig sammendrag</h2>
+    <h3>Antall dager med terskloverskridelse per måned</h3>
+    <div class="graf-wrap" style="height:200px"><canvas id="graf-maaned"></canvas></div>
+    <h3 style="margin-top:20px">Månedlig totalnedbør (mm)</h3>
+    <div class="graf-wrap" style="height:180px"><canvas id="graf-maaned-nedbor"></canvas></div>
+  </div>
+
+  <!-- SIDE 4: Hendelsestabell -->
+  <div class="side">
+    <h2>Alle hendelser – overskridelse av Scenario 1-terskel (≥${SC1.threshD} mm/d)</h2>
+    <p style="font-size:11px;color:#e67e22;margin-bottom:10px">
+      ⚠ Timesintensitet (${SC1.threshH}/${SC2.threshH} mm/t) kan ikke kontrolleres – SN57480 har kun daglige observasjoner.
+    </p>
+    <table>
+      <thead><tr>
+        <th>Dato</th>
+        <th>Døgnnedbør seNorge (mm)</th>
+        <th>Døgnnedbør Botnen (mm)</th>
+        <th>Sc.1 døgn (≥${SC1.threshD})</th>
+        <th>Sc.2 døgn (≥${SC2.threshD})</th>
+      </tr></thead>
+      <tbody>
+        ${data.filter(d=>d.sc1).map(d=>`
+          <tr class="${d.sc2?'sc2-rad':''}">
+            <td>${norskDato(d.dag)}</td>
+            <td class="${d.sc1d?'merket':''}">${d.mmD.toFixed(1)}</td>
+            <td class="${d.mmStasjon>=SC1.threshD?'merket':''}">${d.mmStasjon.toFixed(1)}</td>
+            <td>${d.sc1d?'<span class="badge gul">✓</span>':''}</td>
+            <td>${d.sc2d?'<span class="badge rod">✓</span>':''}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+    ${data.filter(d=>d.sc1).length===0 ? '<p style="color:#8b949e;padding:20px 0">Ingen overskridelser i perioden.</p>' : ''}
+  </div>`;
+
+  // ─── Grafer ───────────────────────────────────────────────────────────────
+  const labels = data.map(d => norskDato(d.dag));
+
+  const fargeDgn     = data.map(d => d.sc2d ? '#e9456099' : d.sc1d ? '#f5c00099' : '#2171b566');
+  const fargeStasjon = data.map(d => d.mmStasjon >= SC2.threshD ? '#e9456099' :
+                                     d.mmStasjon >= SC1.threshD ? '#f5c00099' : '#1d6fa466');
+
+  const baseOpts = () => ({
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:true, labels:{font:{size:10},boxWidth:14}} },
+    scales:{
+      x:{ ticks:{maxTicksLimit:12, font:{size:8}}, grid:{display:false} },
+      y:{ min:0, ticks:{font:{size:8}}, grid:{color:'#eaecef'} }
+    }
+  });
+
+  new Chart(document.getElementById('graf-dogn'), {
+    type:'bar',
+    data:{ labels, datasets:[
+      { label:'Døgnnedbør seNorge (mm)', data:data.map(d=>d.mmD), backgroundColor:fargeDgn, borderWidth:0 },
+      { type:'line', label:`Sc.1 ${SC1.threshD} mm/d`, data:data.map(()=>SC1.threshD),
+        borderColor:'#f5c000', borderWidth:1.5, borderDash:[5,4], pointRadius:0, fill:false },
+      { type:'line', label:`Sc.2 ${SC2.threshD} mm/d`, data:data.map(()=>SC2.threshD),
+        borderColor:'#e94560', borderWidth:1.5, borderDash:[5,4], pointRadius:0, fill:false },
+    ]},
+    options: baseOpts()
+  });
+
+  new Chart(document.getElementById('graf-stasjon'), {
+    type:'bar',
+    data:{ labels, datasets:[
+      { label:'Døgnnedbør Botnen (mm)', data:data.map(d=>d.mmStasjon), backgroundColor:fargeStasjon, borderWidth:0 },
+      { type:'line', label:`Sc.1 ${SC1.threshD} mm/d`, data:data.map(()=>SC1.threshD),
+        borderColor:'#f5c000', borderWidth:1.5, borderDash:[5,4], pointRadius:0, fill:false },
+      { type:'line', label:`Sc.2 ${SC2.threshD} mm/d`, data:data.map(()=>SC2.threshD),
+        borderColor:'#e94560', borderWidth:1.5, borderDash:[5,4], pointRadius:0, fill:false },
+    ]},
+    options: baseOpts()
+  });
+
+  new Chart(document.getElementById('graf-maaned'), {
+    type:'bar',
+    data:{ labels: mnKeys.map(maanedNavn), datasets:[
+      { label:'Sc.1 dager', data:mnKeys.map(k=>maaneder[k].sc1), backgroundColor:'#f5c00099' },
+      { label:'Sc.2 dager', data:mnKeys.map(k=>maaneder[k].sc2), backgroundColor:'#e9456099' },
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:true, labels:{font:{size:10},boxWidth:14}} },
+      scales:{ x:{ticks:{font:{size:9}},grid:{display:false}}, y:{min:0,ticks:{stepSize:1,font:{size:9}}} } }
+  });
+
+  new Chart(document.getElementById('graf-maaned-nedbor'), {
+    type:'bar',
+    data:{ labels: mnKeys.map(maanedNavn), datasets:[
+      { label:'seNorge rutenett (mm)', data:mnKeys.map(k=>maaneder[k].sumD.toFixed(1)), backgroundColor:'#2171b566' },
+      { label:'Botnen stasjon (mm)', data:mnKeys.map(k=>maaneder[k].sumStasjon.toFixed(1)), backgroundColor:'#1d6fa4bb' },
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:true, labels:{font:{size:10},boxWidth:14}} },
+      scales:{ x:{ticks:{font:{size:9}},grid:{display:false}}, y:{min:0,ticks:{font:{size:9}}} } }
+  });
+}
+
+// ─── 5-års nedbørdata ─────────────────────────────────────────────────────────
+async function hent5ar() {
+  setStatus('Henter 5-årsdata fra Frost API … (dette tar litt tid)');
+  const now = new Date();
+  const fra = new Date(now - 5 * 365.25 * 24 * 3600e3);
+  const fmt = d => d.toISOString().replace(/\.\d+Z$/, 'Z');
+  const url = `https://frost.met.no/observations/v0.jsonld`
+    + `?sources=${STATION_ID}:0`
+    + `&elements=${encodeURIComponent('sum(precipitation_amount P1D)')}`
+    + `&referencetime=${encodeURIComponent(fmt(fra) + '/' + fmt(now))}`
+    + `&limit=100000`;
+  const r = await fetch(url, { headers: { Authorization: 'Basic ' + btoa(CLIENT_ID + ':') } });
+  const j = await r.json();
+  if (j.error) throw new Error('Frost 5år: ' + (j.error.reason || JSON.stringify(j.error)));
+
+  // Bygg daglig datasett
+  const daglig = {};
+  for (const rec of (j.data || [])) {
+    const dag = rec.referenceTime.slice(0, 10);
+    daglig[dag] = rec.observations[0].value ?? 0;
+  }
+  return daglig;
+}
+
+function generer5arGraf(daglig) {
+  // Aggreger per måned
+  const maaneder = {};
+  for (const [dag, mm] of Object.entries(daglig)) {
+    const mk = dag.slice(0, 7); // "2023-05"
+    maaneder[mk] = (maaneder[mk] || 0) + mm;
+  }
+
+  // Aggreger per år
+  const aar = {};
+  for (const [dag, mm] of Object.entries(daglig)) {
+    const y = dag.slice(0, 4);
+    aar[y] = (aar[y] || 0) + mm;
+  }
+
+  const mnKeys = Object.keys(maaneder).sort();
+  const mnLabels = mnKeys.map(k => {
+    const mn = ['jan','feb','mar','apr','mai','jun','jul','aug','sep','okt','nov','des'];
+    return mn[parseInt(k.slice(5, 7)) - 1] + ' \'' + k.slice(2, 4);
+  });
+
+  const aarKeys = Object.keys(aar).sort();
+
+  // Farger per år for månedsgraf
+  const aarFarger = ['#1d6fa4','#2ecc71','#e67e22','#9b59b6','#e94560'];
+  const mnFarger = mnKeys.map(mk => {
+    const idx = aarKeys.indexOf(mk.slice(0, 4));
+    return (aarFarger[idx % aarFarger.length] || '#1d6fa4') + 'cc';
+  });
+
+  // Gjennomsnittlig månedlig for normallinjen
+  const snittPrMaaned = Array(12).fill(0);
+  const teller = Array(12).fill(0);
+  for (const [mk, sum] of Object.entries(maaneder)) {
+    const mi = parseInt(mk.slice(5, 7)) - 1;
+    snittPrMaaned[mi] += sum;
+    teller[mi]++;
+  }
+  const snitt = snittPrMaaned.map((s, i) => teller[i] ? s / teller[i] : 0);
+  const snittLinje = mnKeys.map(mk => snitt[parseInt(mk.slice(5, 7)) - 1]);
+
+  const side = document.createElement('div');
+  side.className = 'side';
+  side.innerHTML = `
+    <h2>Nedbørshistorikk – ${STATION_NAME} (siste 5 år)</h2>
+
+    <h3>Månedlig nedbør (mm) – fargekodet per år</h3>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      ${aarKeys.map((y, i) => `<span style="display:flex;align-items:center;gap:5px;font-size:11px">
+        <span style="width:14px;height:14px;background:${aarFarger[i%aarFarger.length]};border-radius:3px;display:inline-block"></span>${y}
+      </span>`).join('')}
+      <span style="display:flex;align-items:center;gap:5px;font-size:11px">
+        <span style="width:24px;height:2px;background:#888;display:inline-block;border-top:2px dashed #888"></span>Snitt per måned
+      </span>
+    </div>
+    <div class="graf-wrap" style="height:260px"><canvas id="graf-5ar-maaned"></canvas></div>
+
+    <h3 style="margin-top:24px">Årstotal nedbør (mm)</h3>
+    <div class="graf-wrap" style="height:200px"><canvas id="graf-5ar-aar"></canvas></div>
+
+    <p style="font-size:11px;color:#8b949e;margin-top:12px">
+      Kilde: MET Frost API · ${STATION_NAME} · Daglige totaler (sum P1D)
+    </p>`;
+
+  document.getElementById('rapport').appendChild(side);
+
+  // Månedsgraf
+  new Chart(document.getElementById('graf-5ar-maaned'), {
+    type: 'bar',
+    data: {
+      labels: mnLabels,
+      datasets: [
+        {
+          label: 'Månedlig nedbør (mm)',
+          data: mnKeys.map(k => maaneder[k].toFixed(1)),
+          backgroundColor: mnFarger,
+          borderWidth: 0,
+        },
+        {
+          type: 'line',
+          label: 'Periodegjennomsnitt per månedsnavn',
+          data: snittLinje,
+          borderColor: '#888',
+          borderWidth: 1.5,
+          borderDash: [5, 4],
+          pointRadius: 0,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 8 }, maxRotation: 45 }, grid: { display: false } },
+        y: { min: 0, ticks: { font: { size: 9 } }, grid: { color: '#eaecef' },
+             title: { display: true, text: 'mm', font: { size: 9 } } },
+      },
+    },
+  });
+
+  // Årstotal
+  const aarFargerSolid = aarKeys.map((_, i) => aarFarger[i % aarFarger.length] + 'cc');
+  new Chart(document.getElementById('graf-5ar-aar'), {
+    type: 'bar',
+    data: {
+      labels: aarKeys,
+      datasets: [{
+        label: 'Årstotal (mm)',
+        data: aarKeys.map(y => aar[y].toFixed(0)),
+        backgroundColor: aarFargerSolid,
+        borderRadius: 4,
+        borderWidth: 0,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.raw} mm` } },
+      },
+      scales: {
+        x: { ticks: { font: { size: 11 } }, grid: { display: false } },
+        y: { min: 0, ticks: { font: { size: 9 } }, grid: { color: '#eaecef' },
+             title: { display: true, text: 'mm', font: { size: 9 } } },
+      },
+    },
+  });
+
+  // Legg til årstotaler som tekst over søylene
+  for (const [y, sum] of Object.entries(aar)) {
+    // Vises i tooltip
+  }
+}
+
+// ─── Kjør ─────────────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    const [frost, gts, daglig5ar] = await Promise.all([hentFrost(), hentGTS(), hent5ar()]);
+    const data = analyser(frost, gts);
+    document.getElementById('laster').style.display = 'none';
+    document.getElementById('rapport').style.display = 'block';
+    document.getElementById('print-knapp').style.display = 'block';
+    genererRapport(data);
+    generer5arGraf(daglig5ar);
+  } catch(e) {
+    document.getElementById('laster').style.display = 'none';
+    const feil = document.getElementById('feil');
+    feil.style.display = 'block';
+    feil.innerHTML = `<h2>Feil ved lasting av data</h2><pre>${e.message}</pre>`;
+  }
+})();
+</script>
+</body>
+</html>
