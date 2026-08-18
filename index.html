@@ -513,6 +513,37 @@ async function getRrPunkt(lat, lon, isoDate) {
   }
 }
 
+// Datagrunnlag for en gitt dato: observasjon eller prognose, og hvilken modell.
+// Samme tjeneste som senorge.no bruker for å merke sine egne kart (åpen CORS).
+// Datoen som sendes er rasterstempelet D+1, som ellers i tjenesten.
+const PROGNOSE_SVC = 'https://services.xgeo.no/seNorgeMapAppServices/Services/UIService.svc/GetPrognosisStatus';
+const WMS_SRC      = 'https://nf-web-e-prod01.nve.no/wms_server/wms_server.aspx';
+
+function kortModellnavn(m) {
+  if (!m) return null;
+  if (/seNorge2018/i.test(m)) return 'seNorge2018 interpolerte målinger';
+  if (/Meps|Metpp/i.test(m))  return 'MEPS';
+  if (/ECMWF/i.test(m))       return 'ECMWF';
+  return m.length > 40 ? m.slice(0, 40) + '…' : m;
+}
+
+async function getDataKilde(layerId, isoDate) {
+  try {
+    const [y, m, d] = addDaysISO(isoDate, 1).split('-').map(Number);
+    const rfc = new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).toUTCString();
+    const req = encodeURIComponent(JSON.stringify({
+      MapLayerId: layerId, MapLayerSource: WMS_SRC, Date: rfc, Language: 'no',
+    }));
+    const r = await fetch(`${PROGNOSE_SVC}?request=${req}`);
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (j.Model == null) return null;
+    return { erPrognose: !!j.IsPrognosis, modell: j.Model, kort: kortModellnavn(j.Model) };
+  } catch {
+    return null; // faller tilbake på enkel dato-sammenligning
+  }
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 //  AREALRAPPORT – vannmetningsfordeling over Fv609-rektangelet
 // ──────────────────────────────────────────────────────────────────────────
@@ -619,21 +650,31 @@ async function lastArealrapport() {
 
   const dato = calValue('dato');
   const erHistorisk = dato < todayISO();
-  document.getElementById('area-dato-lbl').textContent =
-    `${dato} · ${erHistorisk ? 'observert' : 'prognose'} · seNorge 1×1 km`;
+  const datoEl = document.getElementById('area-dato-lbl');
+  // Foreløpig merking – erstattes med modellnavn så snart NVE har svart
+  datoEl.textContent = `${dato} · ${erHistorisk ? 'observert' : 'prognose'} · seNorge 1×1 km`;
+  datoEl.removeAttribute('title');
 
   try {
-    const [smRes, rrRes, timeRes] = await Promise.allSettled([
+    const [smRes, rrRes, timeRes, kildeRes] = await Promise.allSettled([
       getAreaSm(),
       getAreaRr(dato),
       getAreaTimesMaks(dato),
+      getDataKilde('rr', dato),
     ]);
     if (seq !== arealSeq) return; // nyere kall pågår – forkast dette svaret
 
     const sm    = smRes.status   === 'fulfilled' ? smRes.value   : null;
     const rr    = rrRes.status   === 'fulfilled' ? rrRes.value   : null;
     const tMaks = timeRes.status === 'fulfilled' ? timeRes.value : null;
+    const kilde = kildeRes.status === 'fulfilled' ? kildeRes.value : null;
     if (!sm) throw new Error('ingen vannmetningsdata');
+
+    // Datolinje med faktisk datagrunnlag fra NVE
+    if (kilde) {
+      datoEl.textContent = `${dato} · ${kilde.erPrognose ? 'prognose' : 'observert'} · ${kilde.kort}`;
+      datoEl.title = kilde.modell; // full modellbeskrivelse ved hover
+    }
 
     const { counts, dataPx, total, maxPct } = sm;
 
