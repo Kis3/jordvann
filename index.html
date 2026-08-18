@@ -486,14 +486,26 @@ let chartFc = null, chartHist = null, chartFrost = null;
 // ──────────────────────────────────────────────────────────────────────────
 //  ARCGIS IMAGE LAYER (tile-based, EPSG:3857)
 // ──────────────────────────────────────────────────────────────────────────
+// ISO-dato + n dager (lokal kalender, ingen UTC-fallgruver for hele døgn)
+function addDaysISO(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return toLocalISO(new Date(y, m - 1, d + n));
+}
+
 // Dato → mosaicRule som velger riktig dagsraster i katalogen.
-// VIKTIG: ImageServeren er IKKE tids-aktivert – &time= ignoreres stille og
+// VIKTIG 1: ImageServeren er IKKE tids-aktivert – &time= ignoreres stille og
 // serveren viser alltid nyeste raster (verifisert aug 2026: fire ulike
-// time-verdier ga byte-identiske bilder). Katalogen har ett raster per dag
-// navngitt <lag>_YYYY_MM_DD (rr3h har timesuffiks – LIKE dekker begge).
+// time-verdier ga byte-identiske bilder).
+// VIKTIG 2: seNorge-døgnet «D» går fra D kl 08 til D+1 kl 08 og lagres i
+// rasteret STEMPLET D+1 (verifisert mot senorge.no: UI-dato D sender
+// time=D+1 til WMS-en). Vi legger derfor på én dag her, slik at valgt dato
+// i appen viser samme bilde som samme dato på senorge.no.
+// Katalogen har ett raster per dag navngitt <lag>_YYYY_MM_DD
+// (rr3h har timesuffiks – LIKE dekker begge).
 function dateToMosaicRule(layerName, isoDate) {
   if (!isoDate) return null;
-  const prefix = `${layerName}_${isoDate.replace(/-/g, '_')}`;
+  const rasterDate = addDaysISO(isoDate, 1);
+  const prefix = `${layerName}_${rasterDate.replace(/-/g, '_')}`;
   return encodeURIComponent(JSON.stringify({
     mosaicMethod: 'esriMosaicAttribute',
     where: `Name LIKE '${prefix}%'`,
@@ -771,11 +783,13 @@ function renderAlert(sm, p1h, p24h, historiskDato) {
     </div>`;
 }
 
-// Observert døgnnedbør (seNorge rutenett) for én bestemt dato via gts-proxyen
+// Observert døgnnedbør (seNorge rutenett) for én bestemt dato via gts-proxyen.
+// seNorge-døgnet «D» (D kl 06/08 → D+1) er stemplet D+1 i gts – hent den raden.
 async function getObservedRr(lat, lon, isoDate) {
   try {
+    const stamp = addDaysISO(isoDate, 1);
     const { x, y } = latLonToUTM33(lat, lon);
-    const resp = await fetch(`/api/gts?x=${x}&y=${y}&start=${isoDate}&end=${isoDate}`);
+    const resp = await fetch(`/api/gts?x=${x}&y=${y}&start=${stamp}&end=${stamp}`);
     const text = await resp.text();
     if (!resp.ok || text.includes('ErrorMessage') || text.includes('No cell exists')) return null;
     const lines = text.trim().split('\n').filter(l => !l.startsWith('#') && l.includes(';'));
@@ -1153,7 +1167,7 @@ function addStationMarker() {
 //  CALENDAR WIDGET
 // ──────────────────────────────────────────────────────────────────────────
 const CAL_MIN_OFFSET = -30; // days relative to today
-const CAL_MAX_OFFSET =   9;
+const CAL_MAX_OFFSET =   8; // valgt dato D bruker raster D+1; prognoserastere finnes t.o.m. i dag+9
 const DAYS_NB = ['man','tir','ons','tor','fre','lør','søn'];
 const MONTHS_NB = ['januar','februar','mars','april','mai','juni','juli','august','september','oktober','november','desember'];
 
