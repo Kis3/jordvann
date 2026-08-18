@@ -265,7 +265,6 @@
     <label>Oppløsning</label>
     <select id="rr-layer" onchange="updateRrLayer()">
       <option value="rr" selected>Døgn (mm/d)</option>
-      <option value="rr3h">3 timer (mm)</option>
       <option value="rr3d">3 døgn (mm)</option>
     </select>
     <label>Dato</label>
@@ -422,9 +421,10 @@
 
     <!-- Nedbørshistorikk -->
     <div class="r-section" id="r-hist" style="display:none">
-      <h3>Nedbørshistorikk – seNorge (siste 7 dager)</h3>
+      <h3>Nedbørshistorikk – seNorge (siste 7 døgn)</h3>
       <div id="r-hist-total" style="font-size:11px;color:#8b949e;margin-bottom:6px"></div>
       <canvas id="chart-hist"></canvas>
+      <div style="font-size:9px;color:#484f58;margin-top:4px">Døgn = kl. 08–08, samme inndeling som senorge.no</div>
     </div>
 
     <!-- Frost station extras -->
@@ -500,8 +500,10 @@ function addDaysISO(iso, n) {
 // rasteret STEMPLET D+1 (verifisert mot senorge.no: UI-dato D sender
 // time=D+1 til WMS-en). Vi legger derfor på én dag her, slik at valgt dato
 // i appen viser samme bilde som samme dato på senorge.no.
-// Katalogen har ett raster per dag navngitt <lag>_YYYY_MM_DD
-// (rr3h har timesuffiks – LIKE dekker begge).
+// Katalogen har ett raster per dag navngitt <lag>_YYYY_MM_DD.
+// NB: Kun lag med ETT raster per døgn støttes. Timesoppløste lag (f.eks.
+// rr3h, som har 8 rastere per døgn: _00, _03 … _21) ville gitt et vilkårlig
+// treff på LIKE-jokertegnet – de er derfor holdt utenfor lagvalget.
 function dateToMosaicRule(layerName, isoDate) {
   if (!isoDate) return null;
   const rasterDate = addDaysISO(isoDate, 1);
@@ -621,8 +623,10 @@ async function getSmPixel(lat, lon) {
 // ──────────────────────────────────────────────────────────────────────────
 async function getHistPrecip(lat, lon) {
   const { x, y } = latLonToUTM33(lat, lon);
+  // Stemplene D−(HIST_DAYS−1) … D representerer senorge-dagene
+  // D−HIST_DAYS … D−1, altså de siste HIST_DAYS komplette døgnene.
   const end   = todayISO();
-  const start = toLocalISO(new Date(Date.now() - HIST_DAYS * 24 * 3600e3));
+  const start = addDaysISO(end, -(HIST_DAYS - 1));
   // Route via Vercel serverless proxy – gts.nve.no lacks CORS headers
   const url  = `/api/gts?x=${x}&y=${y}&start=${start}&end=${end}`;
   const resp  = await fetch(url);
@@ -633,7 +637,10 @@ async function getHistPrecip(lat, lon) {
   lines.shift(); // header row
   return lines.map(l => {
     const [dateStr, val] = l.split(';');
-    return { date: dateStr.trim(), v: parseFloat(val.trim()) };
+    // gts stempler døgnet ved SLUTT (D kl 08 → D+1 kl 08 lagres som D+1),
+    // så raden stemplet S er senorge-dagen S−1 – samme dag som senorge.no viser.
+    const [d, m, y] = dateStr.trim().split(' ')[0].split('.');
+    return { dagISO: addDaysISO(`${y}-${m}-${d}`, -1), v: parseFloat(val.trim()) };
   }).filter(p => !isNaN(p.v));
 }
 
@@ -956,26 +963,31 @@ async function generateReport(lat, lon) {
     zIndexOffset: 500,
   }).addTo(map);
 
-  // Show loading state
-  destroyCharts();
-  showSections(['r-loc','r-alert','r-sm','r-fc','r-hist']);
-  setLoading('r-sm-body');
-  document.getElementById('r-loc-name').textContent   = '…';
-  document.getElementById('r-loc-coords').textContent = `${lat.toFixed(4)}°N  ${lon.toFixed(4)}°Ø`;
-  ['fc-1h','fc-24h'].forEach(id => document.getElementById(id).textContent = '…');
-  document.getElementById('r-hist-total').textContent = '…';
+  // YR har ingen historikk – prognosepanelet gjelder kun for i dag og fremover
+  const valgtDato = calValue('sm');
+  const erHistorisk = valgtDato < todayISO();
 
   // Check if near Frost station
   const distToStation = Math.hypot(lat - STATION.lat, lon - STATION.lon);
   const nearStation   = distToStation < 0.05; // ~5 km
 
-  if (nearStation) showSections(['r-loc','r-alert','r-sm','r-fc','r-hist','r-frost']);
+  // Show loading state
+  destroyCharts();
+  const seksjoner = ['r-loc','r-alert','r-sm','r-hist'];
+  if (!erHistorisk) seksjoner.splice(3, 0, 'r-fc');
+  if (nearStation)  seksjoner.push('r-frost');
+  showSections(seksjoner);
+  setLoading('r-sm-body');
+  document.getElementById('r-loc-name').textContent   = '…';
+  document.getElementById('r-loc-coords').textContent = `${lat.toFixed(4)}°N  ${lon.toFixed(4)}°Ø`;
+  if (!erHistorisk) ['fc-1h','fc-24h'].forEach(id => document.getElementById(id).textContent = '…');
+  document.getElementById('r-hist-total').textContent = '…';
 
-  // Run all fetches in parallel
+  // Run all fetches in parallel (YR hoppes over for historiske datoer)
   const settled = await Promise.allSettled([
     getPlaceName(lat, lon),
     getSmPixel(lat, lon),
-    getForecast(lat, lon),
+    erHistorisk ? Promise.resolve(null) : getForecast(lat, lon),
     getHistPrecip(lat, lon),
   ]);
   if (seq !== reportSeq) return; // nyere klikk pågår – forkast dette svaret
@@ -1032,8 +1044,7 @@ async function generateReport(lat, lon) {
   // ── Varslingsstatus ──
   // Historisk dato: kombiner datoens vannmetning med OBSERVERT nedbør for
   // samme dato (YR-prognosen fra nå er irrelevant for etteranalyse).
-  const valgtDato = calValue('sm');
-  if (valgtDato < todayISO()) {
+  if (erHistorisk) {
     const obsRr = await getObservedRr(lat, lon, valgtDato);
     if (seq !== reportSeq) return;
     renderAlert(sm, null, obsRr, valgtDato);
@@ -1046,10 +1057,7 @@ async function generateReport(lat, lon) {
   if (h && h.length) {
     const total = h.reduce((s, p) => s + p.v, 0);
     document.getElementById('r-hist-total').textContent = `Total: ${total.toFixed(1)} mm`;
-    const hLabels = h.map(p => {
-      const parts = p.date.split(' ')[0].split('.');
-      return `${parts[0]}.${parts[1]}`;
-    });
+    const hLabels = h.map(p => `${p.dagISO.slice(8,10)}.${p.dagISO.slice(5,7)}`);
     chartHist = barChart('chart-hist', hLabels, h.map(p => p.v), '#2171b5', 'mm');
   } else {
     document.getElementById('r-hist-total').textContent = 'Ikke tilgjengelig';
@@ -1240,8 +1248,9 @@ function calClose(id) {
 }
 
 function calInit(id, isoValue) {
-  const d = new Date(isoValue);
-  calState[id] = { value: isoValue, viewYear: d.getFullYear(), viewMonth: d.getMonth() };
+  // Les år/måned direkte fra strengen – new Date('yyyy-mm-dd') tolkes som UTC
+  const [y, m] = isoValue.split('-').map(Number);
+  calState[id] = { value: isoValue, viewYear: y, viewMonth: m - 1 };
   document.getElementById('cal-trigger-' + id).addEventListener('click', e => { e.stopPropagation(); calOpen(id); calRender(id); });
   document.getElementById('cal-label-' + id).textContent = isoValue;
 }
