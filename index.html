@@ -486,8 +486,22 @@ let chartFc = null, chartHist = null, chartFrost = null;
 // ──────────────────────────────────────────────────────────────────────────
 //  ARCGIS IMAGE LAYER (tile-based, EPSG:3857)
 // ──────────────────────────────────────────────────────────────────────────
+// Dato → mosaicRule som velger riktig dagsraster i katalogen.
+// VIKTIG: ImageServeren er IKKE tids-aktivert – &time= ignoreres stille og
+// serveren viser alltid nyeste raster (verifisert aug 2026: fire ulike
+// time-verdier ga byte-identiske bilder). Katalogen har ett raster per dag
+// navngitt <lag>_YYYY_MM_DD (rr3h har timesuffiks – LIKE dekker begge).
+function dateToMosaicRule(layerName, isoDate) {
+  if (!isoDate) return null;
+  const prefix = `${layerName}_${isoDate.replace(/-/g, '_')}`;
+  return encodeURIComponent(JSON.stringify({
+    mosaicMethod: 'esriMosaicAttribute',
+    where: `Name LIKE '${prefix}%'`,
+  }));
+}
+
 const ArcGISImageLayer = L.GridLayer.extend({
-  options: { tileSize: 256, opacity: 0.7, layerName: 'odmhbv_ssspct', date: null },
+  options: { tileSize: 256, opacity: 0.7, layerName: 'odmhbv_ssspct', dateISO: null },
   createTile(coords, done) {
     const img = document.createElement('img');
     img.crossOrigin = 'anonymous';
@@ -498,7 +512,8 @@ const ArcGISImageLayer = L.GridLayer.extend({
     let url  = `${SENORGE}/${this.options.layerName}/ImageServer/exportImage`
              + `?bbox=${sw.x},${sw.y},${ne.x},${ne.y}&bboxSR=3857`
              + `&size=${sz},${sz}&imageSR=3857&format=png32&transparent=true&f=image`;
-    if (this.options.date) url += `&time=${this.options.date}`;
+    const mr = dateToMosaicRule(this.options.layerName, this.options.dateISO);
+    if (mr) url += `&mosaicRule=${mr}`;
     img.src = url;
     img.onload  = () => done(null, img);
     img.onerror = e  => done(e, img);
@@ -506,8 +521,8 @@ const ArcGISImageLayer = L.GridLayer.extend({
   },
 });
 
-function makeArcLayer(name, dateEpoch, opacity) {
-  return new ArcGISImageLayer({ layerName: name, date: dateEpoch, opacity });
+function makeArcLayer(name, isoDate, opacity) {
+  return new ArcGISImageLayer({ layerName: name, dateISO: isoDate, opacity });
 }
 
 // Lokal dato som ISO-streng (yyyy-mm-dd). Ikke bruk toISOString() –
@@ -517,20 +532,16 @@ function toLocalISO(d) {
 }
 function todayISO() { return toLocalISO(new Date()); }
 
-function dateToEpoch(s) {
-  return s ? new Date(s + 'T12:00:00Z').getTime() : null;
-}
-
 function updateSmLayer() {
   if (smLayer) map.removeLayer(smLayer);
-  smLayer = makeArcLayer('odmhbv_ssspct', dateToEpoch(calValue('sm')), document.getElementById('sm-opacity').value / 100);
+  smLayer = makeArcLayer('odmhbv_ssspct', calValue('sm'), document.getElementById('sm-opacity').value / 100);
   if (document.getElementById('toggle-sm').checked) smLayer.addTo(map);
   lastArealrapport(); // oppdater arealrapport ved ny dato
 }
 
 function updateRrLayer() {
   if (rrLayer) map.removeLayer(rrLayer);
-  rrLayer = makeArcLayer(document.getElementById('rr-layer').value, dateToEpoch(calValue('rr')), document.getElementById('rr-opacity').value / 100);
+  rrLayer = makeArcLayer(document.getElementById('rr-layer').value, calValue('rr'), document.getElementById('rr-opacity').value / 100);
   if (document.getElementById('toggle-rr').checked) rrLayer.addTo(map);
 }
 
@@ -551,12 +562,12 @@ async function getSmPixel(lat, lon) {
   const sw  = L.CRS.EPSG3857.project(L.latLng(lat - d, lon - d));
   const ne  = L.CRS.EPSG3857.project(L.latLng(lat + d, lon + d));
   const bbox  = `${sw.x.toFixed(0)},${sw.y.toFixed(0)},${ne.x.toFixed(0)},${ne.y.toFixed(0)}`;
-  const epoch = dateToEpoch(calValue('sm'));
+  const mr = dateToMosaicRule('odmhbv_ssspct', calValue('sm'));
   const sz    = 256;
 
   let url = `${SENORGE}/odmhbv_ssspct/ImageServer/exportImage`
           + `?bbox=${bbox}&bboxSR=3857&size=${sz},${sz}&imageSR=3857&format=png32&transparent=true&f=image`;
-  if (epoch) url += `&time=${epoch}`;
+  if (mr) url += `&mosaicRule=${mr}`;
 
   let px;
   try {
@@ -711,16 +722,18 @@ function getScenario(sm) {
   return             { no: 2, threshH: 15, threshD: 60 };           // <70% – tørr jord
 }
 
-function renderAlert(sm, p1h, p24h) {
+// historiskDato: satt (yyyy-mm-dd) når rapporten gjelder en dato før i dag –
+// da er p24h observert døgnnedbør for datoen og p1h utilgjengelig (null).
+function renderAlert(sm, p1h, p24h, historiskDato) {
   const alertEl = document.getElementById('r-alert');
   const sc = getScenario(sm);
-  if (!sc || p1h == null) { alertEl.style.display = 'none'; return; }
+  if (!sc || (p1h == null && p24h == null)) { alertEl.style.display = 'none'; return; }
   alertEl.style.display = '';
 
-  const excH = p1h  >= sc.threshH;
-  const excD = p24h >= sc.threshD;
-  const nearH = p1h  >= sc.threshH * 0.5;
-  const nearD = p24h >= sc.threshD * 0.5;
+  const excH  = p1h  != null && p1h  >= sc.threshH;
+  const excD  = p24h != null && p24h >= sc.threshD;
+  const nearH = p1h  != null && p1h  >= sc.threshH * 0.5;
+  const nearD = p24h != null && p24h >= sc.threshD * 0.5;
 
   let bg, textColor, icon, statusTxt;
   if (excH || excD) {
@@ -731,11 +744,16 @@ function renderAlert(sm, p1h, p24h) {
     bg = '#0d2818'; textColor = '#40c463'; icon = '🟢'; statusTxt = 'UNDER TERSKEL';
   }
 
+  const kilde  = historiskDato ? `Observert ${historiskDato}` : 'Prognose';
   const smDesc = sm ? `${sm.label} (${sm.desc})` : '–';
   const warns = [
-    excH ? `⚠ Prognose 1t: <b>${p1h.toFixed(1)} mm/t</b> — terskel ${sc.threshH} mm/t` : '',
-    excD ? `⚠ Prognose 24t: <b>${p24h.toFixed(0)} mm</b> — terskel ${sc.threshD} mm` : '',
+    excH ? `⚠ ${kilde} 1t: <b>${p1h.toFixed(1)} mm/t</b> — terskel ${sc.threshH} mm/t` : '',
+    excD ? `⚠ ${kilde} 24t: <b>${p24h.toFixed(0)} mm</b> — terskel ${sc.threshD} mm` : '',
   ].filter(Boolean);
+
+  const histNote = historiskDato
+    ? `<div style="font-size:9px;color:#8b949e;margin-top:4px">Historisk dato – observert døgnnedbør (seNorge) er brukt. Timesintensitet utilgjengelig.</div>`
+    : '';
 
   document.getElementById('r-alert-body').innerHTML = `
     <div class="alert-box" style="background:${bg}">
@@ -743,12 +761,30 @@ function renderAlert(sm, p1h, p24h) {
       <div class="alert-meta">
         Scenario ${sc.no} aktivt · Vannmetning: ${smDesc}<br>
         Terskler: <b>${sc.threshH} mm/t</b> · <b>${sc.threshD} mm/døgn</b>
+        ${historiskDato && p24h != null ? `<br>Observert døgnnedbør ${historiskDato}: <b>${p24h.toFixed(1)} mm</b>` : ''}
       </div>
       ${warns.map(w => `<div class="alert-warn" style="color:${textColor}">${w}</div>`).join('')}
+      ${histNote}
     </div>
     <div style="font-size:9px;color:#484f58;margin-top:3px">
       Scenario 1 (≥70 %): 10 mm/t, 40 mm/d &nbsp;|&nbsp; Scenario 2 (&lt;70 %): 15 mm/t, 60 mm/d
     </div>`;
+}
+
+// Observert døgnnedbør (seNorge rutenett) for én bestemt dato via gts-proxyen
+async function getObservedRr(lat, lon, isoDate) {
+  try {
+    const { x, y } = latLonToUTM33(lat, lon);
+    const resp = await fetch(`/api/gts?x=${x}&y=${y}&start=${isoDate}&end=${isoDate}`);
+    const text = await resp.text();
+    if (!resp.ok || text.includes('ErrorMessage') || text.includes('No cell exists')) return null;
+    const lines = text.trim().split('\n').filter(l => !l.startsWith('#') && l.includes(';'));
+    lines.shift(); // header
+    const v = parseFloat(lines[0]?.split(';')[1]);
+    return isNaN(v) ? null : v;
+  } catch {
+    return null;
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -948,7 +984,7 @@ async function generateReport(lat, lon) {
       <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${sm.color}"></div></div>
       <div class="sm-source">Dato: ${date} · seNorge ODM/HBV 1×1 km</div>`;
   } else {
-    smBody.innerHTML = '<div style="font-size:11px;color:#8b949e">Ingen data for dette punktet (utenfor modellområde eller hav).</div>';
+    smBody.innerHTML = `<div style="font-size:11px;color:#8b949e">Ingen data for dette punktet ${calValue('sm')} (utenfor modellområde eller hav).</div>`;
   }
 
   // ── YR Forecast ──
@@ -980,7 +1016,16 @@ async function generateReport(lat, lon) {
   }
 
   // ── Varslingsstatus ──
-  renderAlert(sm, p1h, p24h);
+  // Historisk dato: kombiner datoens vannmetning med OBSERVERT nedbør for
+  // samme dato (YR-prognosen fra nå er irrelevant for etteranalyse).
+  const valgtDato = calValue('sm');
+  if (valgtDato < todayISO()) {
+    const obsRr = await getObservedRr(lat, lon, valgtDato);
+    if (seq !== reportSeq) return;
+    renderAlert(sm, null, obsRr, valgtDato);
+  } else {
+    renderAlert(sm, p1h, p24h);
+  }
 
   // ── Nedbørshistorikk ──
   const h = hist;
@@ -1208,11 +1253,11 @@ function init() {
     subdomains: 'abcd', maxZoom: 19,
   }).addTo(map);
 
-  smLayer = makeArcLayer('odmhbv_ssspct', dateToEpoch(today), 0.25);
+  smLayer = makeArcLayer('odmhbv_ssspct', today, 0.25);
   smLayer.addTo(map);
   smLayer.setOpacity(0.25);
 
-  rrLayer = makeArcLayer('rr', dateToEpoch(today), 0.10);
+  rrLayer = makeArcLayer('rr', today, 0.10);
   rrLayer.addTo(map);
   rrLayer.setOpacity(0.10);
 
