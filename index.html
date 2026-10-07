@@ -347,7 +347,8 @@
     <!-- Varsom-kalender: NVEs regionale varsler. Ligger utenfor area-content
          slik at den ikke skjules mens arealrapporten laster på nytt. -->
     <div class="area-section" id="varsom-kalender">
-      <h3>Varsom – regionalt jordskredvarsel (Sunnfjord/Askvoll)</h3>
+      <h3>Varsom – regionalt skredvarsel (jord, flom, sørpe)</h3>
+      <div class="rr-note" style="margin:-4px 0 8px">Sunnfjord og Askvoll · snøskred inngår ikke</div>
       <div class="kal-head">
         <button class="cal-nav" id="vk-forrige" type="button">‹</button>
         <span id="vk-tittel"></span>
@@ -1103,7 +1104,7 @@ function renderVarsomDetalj() {
       ${v.tekst && v.nivå > 1 ? `<div class="vk-tekst">${esc(v.tekst)}</div>` : ''}
       ${v.nivå === 1 && !v.typeNavn ? '<div class="vk-tekst">Ingen varslet skredfare.</div>' : ''}
       ${ulik ? `<div class="vk-tekst" style="color:#f5c000">Ulikt mellom kommunene: ${ulik}</div>` : ''}
-      <a class="vk-lenke" href="${VARSOM_LENKE}" target="_blank" rel="noopener">Se jordskredvarslingen på varsom.no →</a>
+      <a class="vk-lenke" href="${VARSOM_LENKE}" target="_blank" rel="noopener">Se varselet på varsom.no →</a>
     </div>`;
 }
 
