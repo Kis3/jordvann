@@ -108,11 +108,26 @@ const SC1 = { no:1, threshH:10, threshD:40, farge:'#f5c000', desc:'Fuktig jord (
 const SC2 = { no:2, threshH:15, threshD:60, farge:'#e94560', desc:'Tørr jord (<70 % vannmetning)' };
 
 // ─── UTM33N ──────────────────────────────────────────────────────────────────
+// Eksakt WGS84 → UTM sone 33 (Krüger-serien), riktig også 9–10° fra
+// sentralmeridianen (15° Ø). Den tidligere lineære tilnærmingen rundt
+// «Førde = 326000/6820000» brukte i praksis sone 32-tall og plasserte
+// punktene ~300 km for langt øst (Østerdalen).
 function latLonToUTM33(lat, lon) {
-  const R=6378137, REF_LAT=61.46, REF_LON=5.85, REF_X=326000, REF_Y=6820000;
-  const dx = (lon-REF_LON)*Math.cos(lat*Math.PI/180)*111320;
-  const dy = (lat-REF_LAT)*111320;
-  return { x: Math.round(REF_X+dx), y: Math.round(REF_Y+dy) };
+  const a = 6378137, f = 1 / 298.257223563, k0 = 0.9996;
+  const n = f / (2 - f);
+  const A = a / (1 + n) * (1 + n**2 / 4 + n**4 / 64);
+  const alfa = [n/2 - 2*n**2/3 + 5*n**3/16, 13*n**2/48 - 3*n**3/5, 61*n**3/240];
+  const phi = lat * Math.PI / 180, dlam = (lon - 15) * Math.PI / 180;
+  const c = 2 * Math.sqrt(n) / (1 + n);
+  const t = Math.sinh(Math.atanh(Math.sin(phi)) - c * Math.atanh(c * Math.sin(phi)));
+  const xi = Math.atan2(t, Math.cos(dlam));
+  const eta = Math.atanh(Math.sin(dlam) / Math.sqrt(1 + t * t));
+  let x = eta, y = xi;
+  alfa.forEach((al, j) => {
+    x += al * Math.cos(2 * (j + 1) * xi) * Math.sinh(2 * (j + 1) * eta);
+    y += al * Math.sin(2 * (j + 1) * xi) * Math.cosh(2 * (j + 1) * eta);
+  });
+  return { x: Math.round(500000 + k0 * A * x), y: Math.round(k0 * A * y) };
 }
 
 // ─── Data ────────────────────────────────────────────────────────────────────

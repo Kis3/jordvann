@@ -3,14 +3,18 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3000',
 ];
 
+// Kun temaene tjenesten faktisk bruker – rr (døgnnedbør) og rr1h (timesnedbør)
+const ALLOWED_THEMES = ['rr', 'rr1h'];
+
 export default async function handler(req, res) {
   const { x, y, start, end } = req.query;
+  const theme = req.query.theme || 'rr';
 
   // Valider parametre før de settes inn i URL-en mot gts.nve.no
   const isInt  = v => /^-?\d+$/.test(v);
   const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
-  if (!isInt(x) || !isInt(y) || !isDate(start) || !isDate(end)) {
-    return res.status(400).send('Invalid params: x/y must be integers, start/end yyyy-mm-dd');
+  if (!isInt(x) || !isInt(y) || !isDate(start) || !isDate(end) || !ALLOWED_THEMES.includes(theme)) {
+    return res.status(400).send('Invalid params: x/y integers, start/end yyyy-mm-dd, theme rr|rr1h');
   }
 
   // CORS: kun egne origins (samme-origin-kall har ingen Origin-header og passerer)
@@ -19,7 +23,7 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
 
-  const url = `https://gts.nve.no/api/GridTimeSeries/${x}/${y}/${start}/${end}/rr.csv`;
+  const url = `https://gts.nve.no/api/GridTimeSeries/${x}/${y}/${start}/${end}/${theme}.csv`;
   try {
     const r    = await fetch(url);
     const text = await r.text();

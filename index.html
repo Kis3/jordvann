@@ -120,6 +120,34 @@
     .rr-cell .rl { font-size: 9px; color: #8b949e; margin-top: 2px; }
     .rr-note { font-size: 9px; color: #484f58; margin-top: 4px; line-height: 1.5; }
 
+    /* Varselkalender */
+    .kal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .kal-head span { font-size: 12px; font-weight: 600; color: #e6edf3; text-transform: capitalize; }
+    .kal-head .cal-nav:disabled { opacity: 0.25; cursor: default; background: none; }
+    .kal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+    .kal-dow { text-align: center; color: #8b949e; font-size: 9px; padding-bottom: 2px; }
+    .kd {
+      height: 28px; border-radius: 4px; font-size: 10px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      background: #21262d; color: #c9d1d9; border: 1px solid transparent;
+      cursor: pointer; user-select: none;
+    }
+    .kd:hover:not(.kd-utenfor) { filter: brightness(1.25); }
+    .kd-rod    { background: #b3261e; color: #fff; }
+    .kd-gul    { background: #b8860b; color: #fff; }
+    .kd-gronn  { background: #2e7d32; color: #fff; }
+    .kd-ukjent { background: #21262d; color: #6e7681; }
+    .kd-laster { background: #161b22; color: #484f58; animation: kd-puls 1.2s ease-in-out infinite; }
+    .kd-utenfor { background: transparent; color: #30363d; cursor: default; font-weight: 400; }
+    .kd-prognose { border: 1px dashed rgba(255,255,255,0.75); }
+    .kd-idag  { box-shadow: 0 0 0 2px #58a6ff; }
+    .kd-valgt { outline: 2px solid #fff; outline-offset: 1px; }
+    @keyframes kd-puls { 50% { opacity: 0.5; } }
+    .kal-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; font-size: 9px; color: #8b949e; }
+    .kal-legend span { display: flex; align-items: center; gap: 4px; }
+    .kd-prikk { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+    .kd-prognose-prikk { border: 1px dashed rgba(255,255,255,0.75); }
+
     /* Varslingsboks */
     .alert-box { border-radius: 6px; padding: 10px 12px; }
     .alert-status { font-size: 13px; font-weight: 700; margin-bottom: 5px; }
@@ -247,9 +275,8 @@
 <div id="map">
   <div id="map-credit">
     Utviklet av Norconsult Norge AS v/Torgeir Fiskum Hansvik<br>
-    Datagrunnlag: <a href="https://www.senorge.no" target="_blank" style="color:#555;text-decoration:underline">seNorge ODM/HBV (NVE)</a> ·
-    <a href="https://api.met.no" target="_blank" style="color:#555;text-decoration:underline">YR/MET Norge</a> ·
-    <a href="https://frost.met.no" target="_blank" style="color:#555;text-decoration:underline">Frost API (MET)</a>
+    Datagrunnlag: <a href="https://www.senorge.no" target="_blank" style="color:#555;text-decoration:underline">seNorge vannmetning og nedbør (NVE)</a> ·
+    prognoser fra <a href="https://www.met.no" target="_blank" style="color:#555;text-decoration:underline">MET Norge</a> (MEPS/ECMWF)
   </div>
 </div>
 
@@ -260,6 +287,24 @@
     <div class="area-dato" id="area-dato-lbl">Laster …</div>
   </div>
   <div id="area-body">
+    <!-- Varselkalender: status per dag, i dag −30 … +8 -->
+    <div class="area-section" id="area-kalender">
+      <h3>Varselkalender</h3>
+      <div class="kal-head">
+        <button class="cal-nav" id="kal-forrige" type="button">‹</button>
+        <span id="kal-tittel"></span>
+        <button class="cal-nav" id="kal-neste" type="button">›</button>
+      </div>
+      <div class="kal-grid" id="kal-grid"></div>
+      <div class="kal-legend">
+        <span><i class="kd-prikk kd-rod"></i>Overskredet</span>
+        <span><i class="kd-prikk kd-gul"></i>Nærmer seg</span>
+        <span><i class="kd-prikk kd-gronn"></i>Under</span>
+        <span><i class="kd-prikk kd-prognose-prikk"></i>Prognose</span>
+      </div>
+      <div class="rr-note" id="kal-status"></div>
+    </div>
+
     <div id="area-loading" style="display:flex;align-items:center;gap:8px;padding:20px 0;color:#8b949e;font-size:11px">
       <span class="spinner" style="width:18px;height:18px;border-width:2px"></span> Henter arealdata …
     </div>
@@ -293,11 +338,7 @@
 // ──────────────────────────────────────────────────────────────────────────
 //  CONFIG
 // ──────────────────────────────────────────────────────────────────────────
-const CLIENT_ID  = 'ff18c1d5-0abc-4af7-bccb-e4e3fe8ff3ad';
-const FROST_AUTH = 'Basic ' + btoa(CLIENT_ID + ':');
 const SENORGE    = 'https://gis3.nve.no/image/rest/services/seNorgeGrid';
-const GTS        = 'https://gts.nve.no/api/GridTimeSeries';
-const HIST_DAYS  = 7; // nedbørshistorikk-vindu i punktrapporten
 
 const STATION   = { id: 'SN57162', name: 'FØRDE PLU', lat: 61.457407, lon: 5.833958 };
 
@@ -402,7 +443,6 @@ function updateSmLayer() {
   if (smLayer) map.removeLayer(smLayer);
   smLayer = makeArcLayer('odmhbv_ssspct', calValue('dato'), document.getElementById('sm-opacity').value / 100);
   if (document.getElementById('toggle-sm').checked) smLayer.addTo(map);
-  lastArealrapport(); // oppdater arealrapport ved ny dato
 }
 
 function updateRrLayer() {
@@ -418,71 +458,6 @@ function toggleLayer(which, on) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-//  SEMORGE PIXEL VALUE – canvas color extraction
-// ──────────────────────────────────────────────────────────────────────────
-async function getSmPixel(lat, lon) {
-  // seNorge ImageServer needs a large bbox (≥ ~50 km) to render at its minimum scale.
-  // We use d=0.5° and a 256×256 image so the centre pixel accurately represents
-  // the clicked 1 km grid cell.
-  const d   = 0.5;
-  const sw  = L.CRS.EPSG3857.project(L.latLng(lat - d, lon - d));
-  const ne  = L.CRS.EPSG3857.project(L.latLng(lat + d, lon + d));
-  const bbox  = `${sw.x.toFixed(0)},${sw.y.toFixed(0)},${ne.x.toFixed(0)},${ne.y.toFixed(0)}`;
-  const mr = dateToMosaicRule('odmhbv_ssspct', calValue('dato'));
-  const sz    = 256;
-
-  let url = `${SENORGE}/odmhbv_ssspct/ImageServer/exportImage`
-          + `?bbox=${bbox}&bboxSR=3857&size=${sz},${sz}&imageSR=3857&format=png32&transparent=true&f=image`;
-  if (mr) url += `&mosaicRule=${mr}`;
-
-  let px;
-  try {
-    const resp = await fetch(url);
-    if (!resp.ok) return null;
-    const blob = await resp.blob();
-    const bmp  = await createImageBitmap(blob);
-
-    const cv  = document.createElement('canvas');
-    cv.width  = sz; cv.height = sz;
-    const ctx = cv.getContext('2d');
-    ctx.drawImage(bmp, 0, 0);
-    bmp.close(); // frigi bitmap-minne – viktig når arealrapporten henter 35 parallelt
-    const c = Math.floor(sz / 2);
-    px = ctx.getImageData(c, c, 1, 1).data; // centre pixel
-  } catch {
-    return null; // nettverksfeil / ugyldig bilde → behandle som "ingen data"
-  }
-
-  // Transparent → outside Norway domain
-  if (px[3] < 30) return null;
-  // Near-black (1,1,1) = ocean / fjords / outside model domain
-  if (px[0] < 15 && px[1] < 15 && px[2] < 15) return null;
-
-  // Find nearest colour class
-  let best = null, minD = Infinity;
-  for (const cls of SM_COLORS) {
-    const dist = Math.sqrt((px[0]-cls.r)**2 + (px[1]-cls.g)**2 + (px[2]-cls.b)**2);
-    if (dist < minD) { minD = dist; best = cls; }
-  }
-  // 120 ≈ halvparten av minste RGB-avstand mellom to legendefarger –
-  // nærmere enn dette er trygt en klassematch, lenger unna er ukjent farge
-  if (minD > 120) return null;
-  return best;
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-//  YR FORECAST
-// ──────────────────────────────────────────────────────────────────────────
-async function getForecast(lat, lon) {
-  const r = await fetch(
-    `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`,
-    { headers: { 'User-Agent': 'JordvannApp/1.0 norconsult.com' } }
-  );
-  if (!r.ok) throw new Error('YR ' + r.status);
-  return r.json();
-}
-
-// ──────────────────────────────────────────────────────────────────────────
 //  VARSLING – terskellogikk
 // ──────────────────────────────────────────────────────────────────────────
 // Scenario bestemmes av VÅTESTE celle i området.
@@ -495,22 +470,18 @@ function getScenarioFromMax(maxPct) {
     : { no: 2, threshH: 15, threshD: 60 };  // tørrere jord – krever mer nedbør
 }
 
-// Døgnnedbør fra seNorge-rutenettet for ett punkt og én dato, via gts-proxyen.
-// seNorge-døgnet «D» (D kl 08 → D+1 kl 08) er stemplet D+1 i gts – hent den raden.
-async function getRrPunkt(lat, lon, isoDate) {
-  try {
-    const stamp = addDaysISO(isoDate, 1);
-    const { x, y } = latLonToUTM33(lat, lon);
-    const resp = await fetch(`/api/gts?x=${x}&y=${y}&start=${stamp}&end=${stamp}`);
-    const text = await resp.text();
-    if (!resp.ok || text.includes('ErrorMessage') || text.includes('No cell exists')) return null;
-    const lines = text.trim().split('\n').filter(l => !l.startsWith('#') && l.includes(';'));
-    lines.shift();
-    const v = parseFloat(lines[0]?.split(';')[1]);
-    return isNaN(v) ? null : v;
-  } catch {
-    return null;
-  }
+// Felles statusberegning for én dag. Brukes av BÅDE arealrapporten og
+// kalenderen, slik at de aldri kan vise ulik status for samme dato.
+// Nedbøren vurderes på verste celle – samme prinsipp som scenarioet.
+function beregnStatus(maxPct, rrMaks, timeMaks) {
+  const sc = getScenarioFromMax(maxPct);
+  if (!sc || rrMaks == null) return { nivå: 'ukjent', sc };
+  const excD  = rrMaks >= sc.threshD;
+  const excH  = timeMaks != null && timeMaks >= sc.threshH;
+  const nearD = rrMaks >= sc.threshD * 0.5;
+  const nearH = timeMaks != null && timeMaks >= sc.threshH * 0.5;
+  const nivå  = (excD || excH) ? 'rod' : (nearD || nearH) ? 'gul' : 'gronn';
+  return { nivå, sc, excD, excH };
 }
 
 // Datagrunnlag for en gitt dato: observasjon eller prognose, og hvilken modell.
@@ -545,12 +516,11 @@ async function getDataKilde(layerId, isoDate) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-//  AREALRAPPORT – vannmetningsfordeling over Fv609-rektangelet
+//  AREALDATA – vannmetning (alle modellceller) og nedbørsserier
 // ──────────────────────────────────────────────────────────────────────────
-// Rutenett for arealutvalget. Vannmetning bruker 7×5 = 35 punkter (billige
-// bildekall), nedbør et grovere 5×3 = 15 (ett proxy-kall per punkt).
-const AREA_GRID_ROWS = 5, AREA_GRID_COLS = 7;
-const RR_GRID_ROWS   = 3, RR_GRID_COLS   = 5;
+// Nedbør hentes som tidsserier fra gts i et rutenett av punkter (ett kall per
+// punkt dekker hele perioden). Vannmetning hentes som alle 1 km-celler.
+const RR_GRID_ROWS = 3, RR_GRID_COLS = 5;
 
 // Jevnt fordelte punkter innenfor AREA_RECT
 function arealPunkter(rows, cols) {
@@ -565,82 +535,159 @@ function arealPunkter(rows, cols) {
   return p;
 }
 
-async function getAreaSm() {
-  const punkter = arealPunkter(AREA_GRID_ROWS, AREA_GRID_COLS);
+// Modellcellene i AREA_RECT, i ODM-rasterets eget rutenett (EPSG:32633, 1 km,
+// origo -75000/6450000 – alt på hele tusen). Ber vi om et bilde med bbox justert
+// til 1000 m og size = antall celler, blir hver piksel nøyaktig én modellcelle –
+// ingen resampling. Rektangelet er rotert ~8° i UTM (meridiankonvergens så langt
+// vest i sone 33), så hvert cellesenter sjekkes mot lat/lon-rektangelet.
+let _arealCeller = null;
+function arealCeller() {
+  if (_arealCeller) return _arealCeller;
+  const nv = AREA_RECT.bounds[0], so = AREA_RECT.bounds[1];
+  const hjørner = [[nv[0], nv[1]], [nv[0], so[1]], [so[0], nv[1]], [so[0], so[1]]]
+    .map(([la, lo]) => proj4('EPSG:4326', 'EPSG:32633', [lo, la]));
+  const xs = hjørner.map(c => c[0]), ys = hjørner.map(c => c[1]);
+  const x0 = Math.floor(Math.min(...xs) / 1000) * 1000, x1 = Math.ceil(Math.max(...xs) / 1000) * 1000;
+  const y0 = Math.floor(Math.min(...ys) / 1000) * 1000, y1 = Math.ceil(Math.max(...ys) / 1000) * 1000;
+  const nx = (x1 - x0) / 1000, ny = (y1 - y0) / 1000;
+  const indekser = [];
+  for (let j = 0; j < ny; j++)
+    for (let i = 0; i < nx; i++) {
+      const [lo, la] = proj4('EPSG:32633', 'EPSG:4326', [x0 + (i + 0.5) * 1000, y1 - (j + 0.5) * 1000]);
+      if (la <= nv[0] && la >= so[0] && lo >= nv[1] && lo <= so[1]) indekser.push(j * nx + i);
+    }
+  return (_arealCeller = { x0, y0, x1, y1, nx, ny, indekser });
+}
 
-  // Hent alle parallelt – allSettled slik at ett feilet punkt ikke velter alt
-  const resultater = await Promise.allSettled(
-    punkter.map(([lat, lon]) => getSmPixel(lat, lon))
-  );
+// RGBA-piksel → vannmetningsklasse (null = ingen data / ukjent farge)
+function matchKlasse(r, g, b, a) {
+  if (a < 30) return null;                       // gjennomsiktig = utenfor domenet
+  if (r < 15 && g < 15 && b < 15) return null;   // nesten svart = hav/fjorder
+  let best = null, minD = Infinity;
+  for (const cls of SM_COLORS) {
+    const d = Math.sqrt((r - cls.r) ** 2 + (g - cls.g) ** 2 + (b - cls.b) ** 2);
+    if (d < minD) { minD = d; best = cls; }
+  }
+  // 120 ≈ halvparten av minste RGB-avstand mellom to legendefarger
+  return minD > 120 ? null : best;
+}
+
+// Vannmetningsfordeling over alle modellceller for én dato – ett lite bildekall.
+async function hentVannmetning(iso) {
+  const g = arealCeller();
+  const url = `${SENORGE}/odmhbv_ssspct/ImageServer/exportImage`
+    + `?bbox=${g.x0},${g.y0},${g.x1},${g.y1}&bboxSR=32633&imageSR=32633`
+    + `&size=${g.nx},${g.ny}&format=png32&transparent=true&f=image`
+    + `&mosaicRule=${dateToMosaicRule('odmhbv_ssspct', iso)}`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error('vannmetning HTTP ' + resp.status);
+  const bmp = await createImageBitmap(await resp.blob());
+  const cv  = document.createElement('canvas');
+  cv.width = g.nx; cv.height = g.ny;
+  const ctx = cv.getContext('2d');
+  ctx.drawImage(bmp, 0, 0);
+  bmp.close();
+  const data = ctx.getImageData(0, 0, g.nx, g.ny).data;
 
   const counts = Object.fromEntries(SM_COLORS.map(c => [c.label, 0]));
-  let noData = 0, maxPct = null;
-  for (const res of resultater) {
-    const cls = res.status === 'fulfilled' ? res.value : null;
-    if (cls) {
-      counts[cls.label]++;
-      if (maxPct == null || cls.midPct > maxPct) maxPct = cls.midPct;
-    } else noData++;
+  let dataCeller = 0, maxPct = null;
+  for (const idx of g.indekser) {
+    const k = idx * 4;
+    const cls = matchKlasse(data[k], data[k + 1], data[k + 2], data[k + 3]);
+    if (!cls) continue;
+    counts[cls.label]++;
+    dataCeller++;
+    if (maxPct == null || cls.midPct > maxPct) maxPct = cls.midPct;
   }
-
-  const dataPx = resultater.length - noData;
-  return { counts, dataPx, total: resultater.length, maxPct };
+  return { counts, dataCeller, celler: g.indekser.length, maxPct };
 }
 
-// Døgnnedbør over området for valgt dato – min/middel/maks fra rutenettet
-async function getAreaRr(isoDate) {
-  const punkter = arealPunkter(RR_GRID_ROWS, RR_GRID_COLS);
-  const res = await Promise.allSettled(
-    punkter.map(([lat, lon]) => getRrPunkt(lat, lon, isoDate))
-  );
-  const verdier = res
-    .map(r => (r.status === 'fulfilled' ? r.value : null))
-    .filter(v => v != null);
-  if (!verdier.length) return null;
-  return {
-    maks:   Math.max(...verdier),
-    middel: verdier.reduce((s, v) => s + v, 0) / verdier.length,
-    min:    Math.min(...verdier),
-    n:      verdier.length,
-  };
+// Én gts-tidsserie for ett punkt via proxyen → [{ t: ms UTC, v }].
+// gts-tidspunktene er UTC; NoData (65535) filtreres bort.
+async function hentGtsSerie(lat, lon, start, slutt, theme) {
+  const { x, y } = latLonToUTM33(lat, lon);
+  const r = await fetch(`/api/gts?x=${x}&y=${y}&start=${start}&end=${slutt}&theme=${theme}`);
+  const text = await r.text();
+  if (!r.ok || text.includes('ErrorMessage') || text.includes('No cell exists')) return [];
+  return text.trim().split('\n').filter(l => /^\d/.test(l)).map(l => {
+    const [ds, vs] = l.split(';');
+    const [dmy, hms] = ds.trim().split(' ');
+    const [d, m, y] = dmy.split('.').map(Number);
+    return { t: Date.UTC(y, m - 1, d, Number(hms.split(':')[0])), v: parseFloat(vs) };
+  }).filter(p => !isNaN(p.v) && p.v !== 65535);
 }
 
-// Maks timesintensitet fra YR innenfor seNorge-døgnet (D kl 08 → D+1 kl 08).
-// Kun mulig for i dag/fremover – YR har ingen historikk.
-async function getAreaTimesMaks(isoDate) {
-  if (isoDate < todayISO()) return null;
-  // Tre punkter på tvers av rektangelet – nedbørbyger kan treffe ulikt
-  const nv = AREA_RECT.bounds[0], so = AREA_RECT.bounds[1];
-  const midLat = (nv[0] + so[0]) / 2;
-  const punkter = [
-    [midLat, nv[1] + (so[1] - nv[1]) * 0.2],
-    [midLat, (nv[1] + so[1]) / 2],
-    [midLat, nv[1] + (so[1] - nv[1]) * 0.8],
-  ];
-
-  const [y, m, d] = isoDate.split('-').map(Number);
-  const fra = new Date(y, m - 1, d, 8, 0, 0);       // lokal kl. 08
-  const til = new Date(y, m - 1, d + 1, 8, 0, 0);
-
+// Døgnnedbør per seNorge-dag i perioden: Map(dagISO → { maks, middel, n }).
+// Rad stemplet S er døgnet som slutter S kl 06 UTC, altså senorge-dag S−1.
+async function hentNedborSerie(start, slutt) {
   const res = await Promise.allSettled(
-    punkter.map(([lat, lon]) => getForecast(lat, lon))
+    arealPunkter(RR_GRID_ROWS, RR_GRID_COLS).map(([la, lo]) =>
+      hentGtsSerie(la, lo, addDaysISO(start, 1), addDaysISO(slutt, 1), 'rr'))
   );
-
-  let maks = null, treff = 0;
+  const perDag = new Map();
   for (const r of res) {
-    if (r.status !== 'fulfilled' || !r.value) continue;
-    for (const t of (r.value.properties?.timeseries || [])) {
-      const tid = new Date(t.time);
-      if (tid < fra || tid >= til) continue;
-      const mm = t.data?.next_1_hours?.details?.precipitation_amount;
-      if (mm == null) continue;
-      treff++;
-      if (maks == null || mm > maks) maks = mm;
+    if (r.status !== 'fulfilled') continue;
+    for (const p of r.value) {
+      const dag = addDaysISO(new Date(p.t).toISOString().slice(0, 10), -1);
+      if (!perDag.has(dag)) perDag.set(dag, []);
+      perDag.get(dag).push(p.v);
     }
   }
-  return treff ? { maks, timer: treff } : null;
+  const ut = new Map();
+  for (const [dag, v] of perDag)
+    ut.set(dag, { maks: Math.max(...v), middel: v.reduce((a, b) => a + b, 0) / v.length, n: v.length });
+  return ut;
 }
 
+// Maks timesnedbør per seNorge-dag: Map(dagISO → mm/t).
+// Timesverdien stemplet t gjelder timen som slutter t, så den hører til dagen
+// D når D 06 UTC < t ≤ D+1 06 UTC. Bare dager med (nesten) hele døgnet dekket
+// tas med – ved prognosehorisonten (~2,5 døgn fram) er siste døgn ufullstendig,
+// og et maks over noen få timer ville undervurdert intensiteten.
+async function hentTimesSerie(start, slutt) {
+  const res = await Promise.allSettled(
+    arealPunkter(RR_GRID_ROWS, RR_GRID_COLS).map(([la, lo]) =>
+      hentGtsSerie(la, lo, start, addDaysISO(slutt, 2), 'rr1h'))
+  );
+  const maks = new Map(), timer = new Map();
+  let punkterMedData = 0;
+  for (const r of res) {
+    if (r.status !== 'fulfilled' || !r.value.length) continue;
+    punkterMedData++;
+    for (const p of r.value) {
+      const dag = new Date(p.t - 6 * 3600e3 - 60e3).toISOString().slice(0, 10);
+      if (dag < start || dag > slutt) continue;
+      maks.set(dag, Math.max(maks.get(dag) ?? -Infinity, p.v));
+      timer.set(dag, (timer.get(dag) || 0) + 1);
+    }
+  }
+  const ut = new Map();
+  for (const [dag, v] of maks)
+    if (timer.get(dag) >= 23 * punkterMedData) ut.set(dag, v);
+  return ut;
+}
+
+// ── Delt hurtiglager for økten ─────────────────────────────────────────────
+// Kalenderen og arealrapporten bruker samme løfter, så ingenting hentes to
+// ganger. Bevisst ikke lagret mellom økter: seNorge reviderer observasjonene.
+const smLager = new Map(); // dagISO → Promise<hentVannmetning>
+function vannmetningFor(iso) {
+  if (!smLager.has(iso))
+    smLager.set(iso, hentVannmetning(iso).catch(e => { smLager.delete(iso); throw e; }));
+  return smLager.get(iso);
+}
+
+let periodeData = null; // { start, slutt, rr: Promise<Map>, time: Promise<Map> }
+function periodeSerier() {
+  const start = calGetMin(), slutt = calGetMax();
+  if (!periodeData || periodeData.start !== start || periodeData.slutt !== slutt)
+    periodeData = { start, slutt, rr: hentNedborSerie(start, slutt), time: hentTimesSerie(start, slutt) };
+  return periodeData;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  AREALRAPPORT
+// ──────────────────────────────────────────────────────────────────────────
 let arealSeq = 0; // sekvensnummer – forkaster utdaterte svar ved raske datoklikk
 
 async function lastArealrapport() {
@@ -656,18 +703,16 @@ async function lastArealrapport() {
   datoEl.removeAttribute('title');
 
   try {
+    const p = periodeSerier();
     const [smRes, rrRes, timeRes, kildeRes] = await Promise.allSettled([
-      getAreaSm(),
-      getAreaRr(dato),
-      getAreaTimesMaks(dato),
-      getDataKilde('rr', dato),
+      vannmetningFor(dato), p.rr, p.time, getDataKilde('rr', dato),
     ]);
     if (seq !== arealSeq) return; // nyere kall pågår – forkast dette svaret
 
-    const sm    = smRes.status   === 'fulfilled' ? smRes.value   : null;
-    const rr    = rrRes.status   === 'fulfilled' ? rrRes.value   : null;
-    const tMaks = timeRes.status === 'fulfilled' ? timeRes.value : null;
-    const kilde = kildeRes.status === 'fulfilled' ? kildeRes.value : null;
+    const sm    = smRes.status    === 'fulfilled' ? smRes.value              : null;
+    const rr    = rrRes.status    === 'fulfilled' ? rrRes.value.get(dato)    : null;
+    const tMaks = timeRes.status  === 'fulfilled' ? (timeRes.value.get(dato) ?? null) : null;
+    const kilde = kildeRes.status === 'fulfilled' ? kildeRes.value           : null;
     if (!sm) throw new Error('ingen vannmetningsdata');
 
     // Datolinje med faktisk datagrunnlag fra NVE
@@ -676,13 +721,13 @@ async function lastArealrapport() {
       datoEl.title = kilde.modell; // full modellbeskrivelse ved hover
     }
 
-    const { counts, dataPx, total, maxPct } = sm;
+    const { counts, dataCeller, celler, maxPct } = sm;
 
     // ── 1. Vannmetning: fordeling av landareal ──
     let barsHtml = '';
     for (const cls of SM_COLORS) {
       const n   = counts[cls.label] || 0;
-      const pct = dataPx > 0 ? n / dataPx * 100 : 0;
+      const pct = dataCeller > 0 ? n / dataCeller * 100 : 0;
       barsHtml += `
         <div class="kls-row">
           <div class="kls-swatch" style="background:${cls.color}"></div>
@@ -694,12 +739,12 @@ async function lastArealrapport() {
         </div>`;
     }
     document.getElementById('area-bars').innerHTML = barsHtml;
-    const dekning = total > 0 ? (dataPx / total * 100).toFixed(0) : 0;
     document.getElementById('area-kilde').textContent =
-      `${dataPx} av ${total} rutepunkter har data (${dekning} % – vann og fjell utenfor modellen er telt ut)`;
+      `${dataCeller} av ${celler} modellceller (1×1 km) i rektangelet har data – vann og fjell utenfor modellen er telt ut`;
 
     // ── 2. Nedbør over området ──
-    const sc = getScenarioFromMax(maxPct);
+    const status = beregnStatus(maxPct, rr?.maks ?? null, tMaks);
+    const sc = status.sc;
     const farge = (v, terskel) =>
       v >= terskel ? '#ff6b6b' : v >= terskel * 0.5 ? '#f5c000' : '#58a6ff';
 
@@ -714,20 +759,20 @@ async function lastArealrapport() {
           <div class="rl">middel mm/døgn</div>
         </div>
         <div class="rr-cell">
-          <div class="rv" style="color:${tMaks && sc ? farge(tMaks.maks, sc.threshH) : '#58a6ff'}">${tMaks ? tMaks.maks.toFixed(1) : '–'}</div>
+          <div class="rv" style="color:${tMaks != null && sc ? farge(tMaks, sc.threshH) : '#58a6ff'}">${tMaks != null ? tMaks.toFixed(1) : '–'}</div>
           <div class="rl">maks mm/time</div>
         </div>
       </div>
       <div class="rr-note">
         Døgnnedbør fra seNorge-rutenettet (${rr.n} punkter, kl. 08–08).
-        ${tMaks
-          ? 'Timesintensitet er høyeste time fra YR-varselet i samme døgn.'
-          : 'Timesintensitet er ikke tilgjengelig for historiske datoer – YR har kun varsel framover.'}
+        ${tMaks != null
+          ? 'Timesintensitet er høyeste time i samme døgn (seNorge timesnedbør).'
+          : 'Timesintensitet er ikke tilgjengelig for denne datoen – timesprognosen rekker bare ca. 2,5 døgn fram.'}
       </div>` : `
       <div style="font-size:11px;color:#8b949e">Ingen nedbørsdata for ${dato}.</div>`;
 
     // ── 3. Varslingsstatus – bygget på arealtallene over ──
-    renderArealVarsel(sc, maxPct, rr, tMaks, erHistorisk);
+    renderArealVarsel(status, maxPct, rr, tMaks, erHistorisk);
 
     document.getElementById('area-loading').style.display = 'none';
     document.getElementById('area-content').style.display = 'block';
@@ -739,52 +784,165 @@ async function lastArealrapport() {
   }
 }
 
-// Varslingsstatus for hele overvåkningsområdet.
-// Scenario styres av våteste celle; nedbøren av verste celle – begge etter
-// beredskapsplanens ordlyd om «en celle innenfor avgrensingen».
-function renderArealVarsel(sc, maxPct, rr, tMaks, erHistorisk) {
+// Varslingsstatus for hele overvåkningsområdet (status fra beregnStatus).
+function renderArealVarsel(status, maxPct, rr, tMaks, erHistorisk) {
   const el = document.getElementById('area-varsel');
-  if (!sc || !rr) {
+  const sc = status.sc;
+  if (status.nivå === 'ukjent' || !sc || !rr) {
     el.innerHTML = '<div style="font-size:11px;color:#8b949e">Ikke nok data til å vurdere status.</div>';
     return;
   }
 
-  const excD  = rr.maks >= sc.threshD;
-  const excH  = tMaks != null && tMaks.maks >= sc.threshH;
-  const nearD = rr.maks >= sc.threshD * 0.5;
-  const nearH = tMaks != null && tMaks.maks >= sc.threshH * 0.5;
-
-  let bg, fc, ikon, tekst;
-  if (excD || excH) {
-    bg = '#3d0f0f'; fc = '#ff6b6b'; ikon = '🔴'; tekst = 'TERSKEL OVERSKREDET';
-  } else if (nearD || nearH) {
-    bg = '#2d2500'; fc = '#f5c000'; ikon = '🟡'; tekst = 'NÆRMER SEG TERSKEL';
-  } else {
-    bg = '#0d2818'; fc = '#40c463'; ikon = '🟢'; tekst = 'UNDER TERSKEL';
-  }
+  const stil = {
+    rod:   { bg: '#3d0f0f', fc: '#ff6b6b', ikon: '🔴', tekst: 'TERSKEL OVERSKREDET' },
+    gul:   { bg: '#2d2500', fc: '#f5c000', ikon: '🟡', tekst: 'NÆRMER SEG TERSKEL' },
+    gronn: { bg: '#0d2818', fc: '#40c463', ikon: '🟢', tekst: 'UNDER TERSKEL' },
+  }[status.nivå];
 
   const kilde = erHistorisk ? 'Observert' : 'Varslet';
   const advarsler = [
-    excH ? `⚠ ${kilde} timesintensitet <b>${tMaks.maks.toFixed(1)} mm/t</b> — terskel ${sc.threshH} mm/t` : '',
-    excD ? `⚠ ${kilde} døgnnedbør <b>${rr.maks.toFixed(1)} mm</b> — terskel ${sc.threshD} mm` : '',
+    status.excH ? `⚠ ${kilde} timesintensitet <b>${tMaks.toFixed(1)} mm/t</b> — terskel ${sc.threshH} mm/t` : '',
+    status.excD ? `⚠ ${kilde} døgnnedbør <b>${rr.maks.toFixed(1)} mm</b> — terskel ${sc.threshD} mm` : '',
   ].filter(Boolean);
 
   const våtesteKlasse = SM_COLORS.find(c => c.midPct === maxPct);
 
   el.innerHTML = `
-    <div class="alert-box" style="background:${bg}">
-      <div class="alert-status" style="color:${fc}">${ikon} ${tekst}</div>
+    <div class="alert-box" style="background:${stil.bg}">
+      <div class="alert-status" style="color:${stil.fc}">${stil.ikon} ${stil.tekst}</div>
       <div class="alert-meta">
         <b>Scenario ${sc.no}</b> – våteste celle i området: ${våtesteKlasse ? våtesteKlasse.label : '–'}<br>
         Terskler: <b>${sc.threshH} mm/t</b> · <b>${sc.threshD} mm/døgn</b><br>
-        Høyeste i området: ${rr.maks.toFixed(1)} mm/døgn${tMaks ? ` · ${tMaks.maks.toFixed(1)} mm/t` : ''}
+        Høyeste i området: ${rr.maks.toFixed(1)} mm/døgn${tMaks != null ? ` · ${tMaks.toFixed(1)} mm/t` : ''}
       </div>
-      ${advarsler.map(a => `<div class="alert-warn" style="color:${fc}">${a}</div>`).join('')}
+      ${advarsler.map(a => `<div class="alert-warn" style="color:${stil.fc}">${a}</div>`).join('')}
     </div>
     <div class="rr-note">
       Scenario 1 (våteste celle ≥ 70 %): 10 mm/t, 40 mm/d &nbsp;|&nbsp;
       Scenario 2 (under 70 %): 15 mm/t, 60 mm/d
     </div>`;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  VARSELKALENDER – status per dag for hele datoperioden (i dag −30 … +8)
+// ──────────────────────────────────────────────────────────────────────────
+const KAL_SAMTIDIGE = 6;              // maks samtidige vannmetningskall
+const kalStatus = new Map();          // dagISO → { nivå, sc, rrMaks, tMaks, maxPct } | 'laster' | 'feil'
+let kalMåned = null;                  // { y, m } som vises
+let kalSeq = 0;
+
+// Kjør fn over elementene med maks n samtidige
+async function medBegrensning(elementer, n, fn) {
+  let i = 0;
+  const arbeidere = Array.from({ length: Math.min(n, elementer.length) }, async () => {
+    while (i < elementer.length) await fn(elementer[i++]);
+  });
+  await Promise.all(arbeidere);
+}
+
+function periodeDager() {
+  const dager = [];
+  for (let d = calGetMin(); d <= calGetMax(); d = addDaysISO(d, 1)) dager.push(d);
+  return dager;
+}
+
+async function lastKalender() {
+  const seq = ++kalSeq;
+  const dager = periodeDager();
+  dager.forEach(d => kalStatus.set(d, 'laster'));
+  if (!kalMåned) {
+    const [y, m] = calValue('dato').split('-').map(Number);
+    kalMåned = { y, m: m - 1 };
+  }
+  renderKalender();
+  document.getElementById('kal-status').textContent = 'Henter nedbørsserier …';
+
+  const p = periodeSerier();
+  const [rrMap, tMap] = await Promise.all([p.rr, p.time]);
+  if (seq !== kalSeq) return;
+
+  let ferdig = 0;
+  await medBegrensning(dager, KAL_SAMTIDIGE, async dag => {
+    try {
+      const sm = await vannmetningFor(dag);
+      const rrMaks = rrMap.get(dag)?.maks ?? null;
+      const tMaks  = tMap.get(dag) ?? null;
+      kalStatus.set(dag, { ...beregnStatus(sm.maxPct, rrMaks, tMaks), rrMaks, tMaks, maxPct: sm.maxPct });
+    } catch {
+      kalStatus.set(dag, 'feil');
+    }
+    if (seq !== kalSeq) return;
+    ferdig++;
+    document.getElementById('kal-status').textContent =
+      ferdig < dager.length ? `Beregner … ${ferdig}/${dager.length} dager` : '';
+    renderKalender();
+  });
+}
+
+function kalTooltip(dag, s) {
+  const type = dag < todayISO() ? 'observert' : 'prognose';
+  if (s === 'laster') return `${dag} · laster …`;
+  if (s === 'feil' || !s) return `${dag} · kunne ikke hentes`;
+  if (s.nivå === 'ukjent') return `${dag} · ${type}\nIkke nok data til å vurdere status`;
+  const klasse = SM_COLORS.find(c => c.midPct === s.maxPct)?.label ?? '–';
+  const tekst  = { rod: 'Terskel overskredet', gul: 'Nærmer seg terskel', gronn: 'Under terskel' }[s.nivå];
+  return `${dag} · ${type}\n${tekst} – Scenario ${s.sc.no} (våteste celle ${klasse})\n`
+    + `Maks døgn: ${s.rrMaks.toFixed(1)} mm (terskel ${s.sc.threshD})\n`
+    + (s.tMaks != null ? `Maks time: ${s.tMaks.toFixed(1)} mm/t (terskel ${s.sc.threshH})`
+                       : 'Maks time: utilgjengelig');
+}
+
+function renderKalender() {
+  if (!kalMåned) return;
+  const { y, m } = kalMåned;
+  const min = calGetMin(), max = calGetMax(), idag = todayISO(), valgt = calValue('dato');
+  const førsteUkedag = new Date(y, m, 1).getDay();       // 0 = søndag
+  const forskyv = førsteUkedag === 0 ? 6 : førsteUkedag - 1;
+  const dagerIMnd = new Date(y, m + 1, 0).getDate();
+
+  let html = DAYS_NB.map(d => `<div class="kal-dow">${d}</div>`).join('');
+  for (let i = 0; i < forskyv; i++) html += '<div></div>';
+  for (let d = 1; d <= dagerIMnd; d++) {
+    const iso = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const kl = ['kd'];
+    if (iso < min || iso > max) {
+      kl.push('kd-utenfor');
+      html += `<div class="${kl.join(' ')}">${d}</div>`;
+      continue;
+    }
+    const s = kalStatus.get(iso);
+    kl.push(s === 'laster' ? 'kd-laster' : (s === 'feil' || !s) ? 'kd-ukjent' : `kd-${s.nivå}`);
+    if (iso >= idag)   kl.push('kd-prognose');
+    if (iso === idag)  kl.push('kd-idag');
+    if (iso === valgt) kl.push('kd-valgt');
+    const tittel = kalTooltip(iso, s).replace(/"/g, '&quot;');
+    html += `<div class="${kl.join(' ')}" data-iso="${iso}" title="${tittel}">${d}</div>`;
+  }
+  document.getElementById('kal-grid').innerHTML = html;
+  document.getElementById('kal-tittel').textContent = `${MONTHS_NB[m]} ${y}`;
+
+  // Pilene er bare aktive når nabomåneden overlapper perioden
+  const mndStart = (yy, mm) => `${yy}-${String(mm + 1).padStart(2, '0')}-01`;
+  const forrige = m === 0 ? [y - 1, 11] : [y, m - 1];
+  const neste   = m === 11 ? [y + 1, 0] : [y, m + 1];
+  document.getElementById('kal-forrige').disabled = mndStart(y, m) <= min;
+  document.getElementById('kal-neste').disabled   = mndStart(...neste) > max;
+  kalMåned._forrige = forrige; kalMåned._neste = neste;
+}
+
+function kalNav(retning) {
+  const [y, m] = retning < 0 ? kalMåned._forrige : kalMåned._neste;
+  kalMåned = { y, m };
+  renderKalender();
+}
+
+function kalInit() {
+  document.getElementById('kal-grid').addEventListener('click', e => {
+    const celle = e.target.closest('.kd[data-iso]');
+    if (celle) calSelect('dato', celle.dataset.iso);
+  });
+  document.getElementById('kal-forrige').addEventListener('click', () => kalNav(-1));
+  document.getElementById('kal-neste').addEventListener('click', () => kalNav(1));
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -863,10 +1021,13 @@ function calSelect(id, iso) {
   calState[id].value = iso;
   document.getElementById('cal-label-' + id).textContent = iso;
   calClose(id);
-  // Én felles dato styrer begge kartlagene og arealrapporten
+  // Én felles dato styrer begge kartlagene, arealrapporten og kalendermarkeringen
   updateSmLayer();
   updateRrLayer();
   lastArealrapport();
+  const [y, m] = iso.split('-').map(Number);
+  kalMåned = { y, m: m - 1 };
+  renderKalender();
 }
 
 function calOpen(id) {
@@ -923,8 +1084,11 @@ function init() {
   }).addTo(map);
   areaRect.bindTooltip(AREA_RECT.label, { sticky: true });
 
-  // Last arealrapport ved oppstart
+  // Arealrapport og kalender ved oppstart – deler nedbørsseriene og
+  // vannmetningsbildene, så dagens dato hentes bare én gang
+  kalInit();
   lastArealrapport();
+  lastKalender();
 }
 
 init();

@@ -62,10 +62,26 @@ def latlon_to_utm33(lat, lon):
         x, y = p(lon, lat)
         return int(round(x)), int(round(y))
     except ImportError:
-        REF_LAT, REF_LON, REF_X, REF_Y = 61.46, 5.85, 326000, 6820000
-        dx = (lon - REF_LON) * math.cos(math.radians(lat)) * 111320
-        dy = (lat - REF_LAT) * 111320
-        return int(REF_X + dx), int(REF_Y + dy)
+        # Eksakt WGS84 → UTM sone 33 (Krüger-serien), riktig også 9–10° fra
+        # sentralmeridianen (15° Ø), der Vestlandet ligger. Den tidligere
+        # lineære tilnærmingen rundt «Førde = 326000/6820000» brukte i praksis
+        # sone 32-tall og plasserte punktene ~300 km for langt øst (Østerdalen).
+        a, f, k0 = 6378137.0, 1 / 298.257223563, 0.9996
+        n = f / (2 - f)
+        A = a / (1 + n) * (1 + n**2 / 4 + n**4 / 64)
+        alfa = (n / 2 - 2 * n**2 / 3 + 5 * n**3 / 16,
+                13 * n**2 / 48 - 3 * n**3 / 5,
+                61 * n**3 / 240)
+        phi, dlam = math.radians(lat), math.radians(lon - 15)
+        c = 2 * math.sqrt(n) / (1 + n)
+        t = math.sinh(math.atanh(math.sin(phi)) - c * math.atanh(c * math.sin(phi)))
+        xi = math.atan2(t, math.cos(dlam))
+        eta = math.atanh(math.sin(dlam) / math.sqrt(1 + t * t))
+        x = 500000 + k0 * A * (eta + sum(al * math.cos(2 * (j + 1) * xi) * math.sinh(2 * (j + 1) * eta)
+                                         for j, al in enumerate(alfa)))
+        y = k0 * A * (xi + sum(al * math.sin(2 * (j + 1) * xi) * math.cosh(2 * (j + 1) * eta)
+                               for j, al in enumerate(alfa)))
+        return int(round(x)), int(round(y))
 
 
 def latlon_to_merc(lat, lon):
