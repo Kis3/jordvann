@@ -130,12 +130,24 @@
       height: 28px; border-radius: 4px; font-size: 10px; font-weight: 600;
       display: flex; align-items: center; justify-content: center;
       background: #21262d; color: #c9d1d9; border: 1px solid transparent;
-      cursor: pointer; user-select: none;
+      cursor: pointer; user-select: none; position: relative;
     }
+    .kd-merke { position: absolute; top: 0; right: 2px; font-size: 8px; line-height: 1; }
+
+    /* Varsom-detaljer for valgt dato */
+    #varsom-kalender { margin-top: 18px; padding-top: 14px; border-top: 1px solid #30363d; }
+    #vk-detalj { margin-top: 10px; }
+    .vk-boks { background: #161b22; border: 1px solid #30363d; border-left: 3px solid #484f58;
+               border-radius: 6px; padding: 9px 11px; }
+    .vk-tittel { font-size: 12px; font-weight: 700; color: #e6edf3; margin-bottom: 4px; }
+    .vk-tekst  { font-size: 10px; color: #c9d1d9; line-height: 1.5; margin-top: 3px; }
+    .vk-lenke  { display: inline-block; margin-top: 6px; font-size: 10px; color: #58a6ff; text-decoration: none; }
+    .vk-lenke:hover { text-decoration: underline; }
     .kd:hover:not(.kd-utenfor) { filter: brightness(1.25); }
     .kd-rod    { background: #b3261e; color: #fff; }
     .kd-gul    { background: #b8860b; color: #fff; }
     .kd-gronn  { background: #2e7d32; color: #fff; }
+    .kd-oransje { background: #d9600b; color: #fff; }
     .kd-ukjent { background: #21262d; color: #6e7681; }
     .kd-laster { background: #161b22; color: #484f58; animation: kd-puls 1.2s ease-in-out infinite; }
     .kd-utenfor { background: transparent; color: #30363d; cursor: default; font-weight: 400; }
@@ -276,7 +288,8 @@
   <div id="map-credit">
     Utviklet av Norconsult Norge AS v/Torgeir Fiskum Hansvik<br>
     Datagrunnlag: <a href="https://www.senorge.no" target="_blank" style="color:#555;text-decoration:underline">seNorge vannmetning og nedbør (NVE)</a> ·
-    prognoser fra <a href="https://www.met.no" target="_blank" style="color:#555;text-decoration:underline">MET Norge</a> (MEPS/ECMWF)
+    prognoser fra <a href="https://www.met.no" target="_blank" style="color:#555;text-decoration:underline">MET Norge</a> (MEPS/ECMWF) ·
+    regionale varsler fra <a href="https://www.varsom.no" target="_blank" style="color:#555;text-decoration:underline">Varsom/NVE</a>
   </div>
 </div>
 
@@ -289,7 +302,7 @@
   <div id="area-body">
     <!-- Varselkalender: status per dag, i dag −30 … +8 -->
     <div class="area-section" id="area-kalender">
-      <h3>Varselkalender</h3>
+      <h3>Lokal varselkalender – beredskapsplanens terskler</h3>
       <div class="kal-head">
         <button class="cal-nav" id="kal-forrige" type="button">‹</button>
         <span id="kal-tittel"></span>
@@ -329,6 +342,27 @@
         <div id="area-varsel"></div>
       </div>
 
+    </div>
+
+    <!-- Varsom-kalender: NVEs regionale varsler. Ligger utenfor area-content
+         slik at den ikke skjules mens arealrapporten laster på nytt. -->
+    <div class="area-section" id="varsom-kalender">
+      <h3>Varsom – regionalt jordskredvarsel (Sunnfjord/Askvoll)</h3>
+      <div class="kal-head">
+        <button class="cal-nav" id="vk-forrige" type="button">‹</button>
+        <span id="vk-tittel"></span>
+        <button class="cal-nav" id="vk-neste" type="button">›</button>
+      </div>
+      <div class="kal-grid" id="vk-grid"></div>
+      <div class="kal-legend">
+        <span><i class="kd-prikk kd-gronn"></i>Grønt</span>
+        <span><i class="kd-prikk kd-gul"></i>Gult</span>
+        <span><i class="kd-prikk kd-oransje"></i>Oransje</span>
+        <span><i class="kd-prikk kd-rod"></i>Rødt</span>
+        <span><i class="kd-prikk kd-ukjent"></i>Ikke vurdert</span>
+        <span>❄ Sørpeskred inngår</span>
+      </div>
+      <div id="vk-detalj"></div>
     </div>
   </div>
 </div>
@@ -892,8 +926,10 @@ function kalTooltip(dag, s) {
                        : 'Maks time: utilgjengelig');
 }
 
-function renderKalender() {
-  if (!kalMåned) return;
+// Felles månedsrutenett for begge kalenderne. Begge viser alltid SAMME måned,
+// slik at lokal og regional vurdering kan sammenlignes dag for dag.
+// celleFn(iso) → { klasser: [], tittel, merke? } for dager innenfor perioden.
+function tegnMånedsgrid(prefiks, celleFn) {
   const { y, m } = kalMåned;
   const min = calGetMin(), max = calGetMax(), idag = todayISO(), valgt = calValue('dato');
   const førsteUkedag = new Date(y, m, 1).getDay();       // 0 = søndag
@@ -904,45 +940,171 @@ function renderKalender() {
   for (let i = 0; i < forskyv; i++) html += '<div></div>';
   for (let d = 1; d <= dagerIMnd; d++) {
     const iso = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    const kl = ['kd'];
     if (iso < min || iso > max) {
-      kl.push('kd-utenfor');
-      html += `<div class="${kl.join(' ')}">${d}</div>`;
+      html += `<div class="kd kd-utenfor">${d}</div>`;
       continue;
     }
-    const s = kalStatus.get(iso);
-    kl.push(s === 'laster' ? 'kd-laster' : (s === 'feil' || !s) ? 'kd-ukjent' : `kd-${s.nivå}`);
+    const c  = celleFn(iso);
+    const kl = ['kd', ...c.klasser];
     if (iso >= idag)   kl.push('kd-prognose');
     if (iso === idag)  kl.push('kd-idag');
     if (iso === valgt) kl.push('kd-valgt');
-    const tittel = kalTooltip(iso, s).replace(/"/g, '&quot;');
-    html += `<div class="${kl.join(' ')}" data-iso="${iso}" title="${tittel}">${d}</div>`;
+    const tittel = c.tittel.replace(/"/g, '&quot;');
+    html += `<div class="${kl.join(' ')}" data-iso="${iso}" title="${tittel}">${d}${c.merke || ''}</div>`;
   }
-  document.getElementById('kal-grid').innerHTML = html;
-  document.getElementById('kal-tittel').textContent = `${MONTHS_NB[m]} ${y}`;
+  document.getElementById(`${prefiks}-grid`).innerHTML = html;
+  document.getElementById(`${prefiks}-tittel`).textContent = `${MONTHS_NB[m]} ${y}`;
 
   // Pilene er bare aktive når nabomåneden overlapper perioden
   const mndStart = (yy, mm) => `${yy}-${String(mm + 1).padStart(2, '0')}-01`;
-  const forrige = m === 0 ? [y - 1, 11] : [y, m - 1];
-  const neste   = m === 11 ? [y + 1, 0] : [y, m + 1];
-  document.getElementById('kal-forrige').disabled = mndStart(y, m) <= min;
-  document.getElementById('kal-neste').disabled   = mndStart(...neste) > max;
-  kalMåned._forrige = forrige; kalMåned._neste = neste;
+  const neste = m === 11 ? [y + 1, 0] : [y, m + 1];
+  document.getElementById(`${prefiks}-forrige`).disabled = mndStart(y, m) <= min;
+  document.getElementById(`${prefiks}-neste`).disabled   = mndStart(...neste) > max;
+}
+
+// Tegner begge kalenderne og Varsom-detaljene for valgt dato
+function renderKalender() {
+  if (!kalMåned) return;
+  tegnMånedsgrid('kal', iso => {
+    const s = kalStatus.get(iso);
+    return {
+      klasser: [s === 'laster' ? 'kd-laster' : (s === 'feil' || !s) ? 'kd-ukjent' : `kd-${s.nivå}`],
+      tittel: kalTooltip(iso, s),
+    };
+  });
+  tegnMånedsgrid('vk', varsomCelle);
+  renderVarsomDetalj();
 }
 
 function kalNav(retning) {
-  const [y, m] = retning < 0 ? kalMåned._forrige : kalMåned._neste;
-  kalMåned = { y, m };
+  const { y, m } = kalMåned;
+  kalMåned = retning < 0
+    ? (m === 0  ? { y: y - 1, m: 11 } : { y, m: m - 1 })
+    : (m === 11 ? { y: y + 1, m: 0 }  : { y, m: m + 1 });
   renderKalender();
 }
 
 function kalInit() {
-  document.getElementById('kal-grid').addEventListener('click', e => {
-    const celle = e.target.closest('.kd[data-iso]');
-    if (celle) calSelect('dato', celle.dataset.iso);
-  });
-  document.getElementById('kal-forrige').addEventListener('click', () => kalNav(-1));
-  document.getElementById('kal-neste').addEventListener('click', () => kalNav(1));
+  for (const prefiks of ['kal', 'vk']) {
+    document.getElementById(`${prefiks}-grid`).addEventListener('click', e => {
+      const celle = e.target.closest('.kd[data-iso]');
+      if (celle) calSelect('dato', celle.dataset.iso);
+    });
+    document.getElementById(`${prefiks}-forrige`).addEventListener('click', () => kalNav(-1));
+    document.getElementById(`${prefiks}-neste`).addEventListener('click', () => kalNav(1));
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  VARSOM – NVEs regionale jord-, flom- og sørpeskredvarsler
+// ──────────────────────────────────────────────────────────────────────────
+// Åpent API (NLOD, åpen CORS). Ett kall per kommune dekker hele perioden.
+// Rektangelet berører både Sunnfjord og Askvoll (NV-hjørnet), som av og til
+// har ulikt nivå – vi viser det høyeste. Varsom publiserer t.o.m. i dag +2;
+// senere dager står som «Ikke vurdert» (nivå 0).
+const VARSOM_API      = 'https://api01.nve.no/hydrology/forecast/landslide/v1.0.10/api/Warning/Municipality';
+const VARSOM_LENKE    = 'https://www.varsom.no/flom-og-jordskred/varsling/';
+const VARSOM_KOMMUNER = { 4647: 'Sunnfjord', 4645: 'Askvoll' };
+const VARSOM_NIVÅ     = {
+  0: { navn: 'Ikke vurdert', klasse: 'kd-ukjent',  farge: '#484f58', ikon: '⚪' },
+  1: { navn: 'Grønt nivå',   klasse: 'kd-gronn',   farge: '#2e7d32', ikon: '🟢' },
+  2: { navn: 'Gult nivå',    klasse: 'kd-gul',     farge: '#b8860b', ikon: '🟡' },
+  3: { navn: 'Oransje nivå', klasse: 'kd-oransje', farge: '#d9600b', ikon: '🟠' },
+  4: { navn: 'Rødt nivå',    klasse: 'kd-rod',     farge: '#b3261e', ikon: '🔴' },
+};
+// DangerType: 4 sørpeskred, 5 jord- og flomskred, 6 jord-/sørpe-/flomskred, 7 sørpe- og flomskred
+const VARSOM_SØRPE = new Set([4, 6, 7]);
+
+const varsomData = new Map(); // dagISO → { nivå, type, typeNavn, årsaker, tekst, kommuneNivå }
+let varsomStatus = 'laster';  // 'laster' | 'ok' | 'feil'
+
+async function lastVarsom() {
+  const start = calGetMin(), slutt = calGetMax();
+  try {
+    const svar = await Promise.all(Object.entries(VARSOM_KOMMUNER).map(async ([id, kommune]) => {
+      const r = await fetch(`${VARSOM_API}/${id}/1/${start}/${slutt}`);
+      if (!r.ok) throw new Error('Varsom HTTP ' + r.status);
+      return { kommune, varsler: await r.json() };
+    }));
+    for (const { kommune, varsler } of svar) {
+      for (const w of varsler) {
+        const dag  = w.ValidFrom.slice(0, 10);   // varseldøgnet er kl 07–07
+        const post = {
+          nivå:     Number(w.ActivityLevel) || 0,
+          type:     Number(w.DangerType) || null,
+          typeNavn: w.DangerTypeName || '',
+          årsaker:  (w.CauseList || []).map(c => c.Name),
+          tekst:    w.MainText || '',
+        };
+        const eks = varsomData.get(dag);
+        if (!eks) varsomData.set(dag, { ...post, kommuneNivå: { [kommune]: post.nivå } });
+        else {
+          eks.kommuneNivå[kommune] = post.nivå;
+          if (post.nivå > eks.nivå) Object.assign(eks, post);
+        }
+      }
+    }
+    varsomStatus = 'ok';
+  } catch {
+    varsomStatus = 'feil';
+  }
+  renderKalender();
+}
+
+// Ulikt nivå mellom kommunene → «Sunnfjord gult, Askvoll grønt»
+function varsomUlikhet(v) {
+  const nivåer = Object.entries(v.kommuneNivå);
+  if (new Set(nivåer.map(([, n]) => n)).size < 2) return '';
+  return nivåer.map(([k, n]) => `${k} ${VARSOM_NIVÅ[n].navn.replace(' nivå', '').toLowerCase()}`).join(', ');
+}
+
+function varsomCelle(iso) {
+  if (varsomStatus === 'laster') return { klasser: ['kd-laster'], tittel: `${iso} · laster Varsom …` };
+  const v = varsomData.get(iso);
+  if (!v) return { klasser: ['kd-ukjent'], tittel: `${iso} · ingen data fra Varsom` };
+  const niv = VARSOM_NIVÅ[v.nivå] || VARSOM_NIVÅ[0];
+  const sørpe = VARSOM_SØRPE.has(v.type);
+  const ulik = varsomUlikhet(v);
+  return {
+    klasser: [niv.klasse],
+    merke: sørpe ? '<span class="kd-merke" aria-label="sørpeskred">❄</span>' : '',
+    tittel: `${iso} · Varsom: ${niv.navn}`
+      + (v.typeNavn ? `\n${v.typeNavn}` : '')
+      + (v.årsaker.length ? `\nÅrsak: ${v.årsaker.join(', ')}` : '')
+      + (ulik ? `\nUlikt mellom kommunene: ${ulik}` : ''),
+  };
+}
+
+// Ekstern tekst inn i innerHTML – escapes selv om kilden er NVE
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+// Detaljer for valgt dato under Varsom-kalenderen
+function renderVarsomDetalj() {
+  const el = document.getElementById('vk-detalj');
+  const dato = calValue('dato');
+  if (varsomStatus === 'laster') { el.innerHTML = ''; return; }
+  if (varsomStatus === 'feil') {
+    el.innerHTML = '<div style="font-size:11px;color:#ff6b6b">Kunne ikke hente varsler fra Varsom.</div>';
+    return;
+  }
+  const v = varsomData.get(dato);
+  if (!v || v.nivå === 0) {
+    el.innerHTML = `<div class="vk-boks"><div class="vk-tittel" style="color:#8b949e">⚪ ${dato}: ikke vurdert</div>
+      <div class="vk-tekst">Varsom publiserer jordskredvarsler for i dag og to dager fram.</div></div>`;
+    return;
+  }
+  const niv  = VARSOM_NIVÅ[v.nivå];
+  const ulik = varsomUlikhet(v);
+  el.innerHTML = `
+    <div class="vk-boks" style="border-left-color:${niv.farge}">
+      <div class="vk-tittel">${niv.ikon} ${niv.navn}${v.typeNavn ? ` – ${esc(v.typeNavn)}` : ''}</div>
+      ${v.årsaker.length ? `<div class="vk-tekst"><b>Årsak:</b> ${esc(v.årsaker.join(', '))}</div>` : ''}
+      ${v.tekst && v.nivå > 1 ? `<div class="vk-tekst">${esc(v.tekst)}</div>` : ''}
+      ${v.nivå === 1 && !v.typeNavn ? '<div class="vk-tekst">Ingen varslet skredfare.</div>' : ''}
+      ${ulik ? `<div class="vk-tekst" style="color:#f5c000">Ulikt mellom kommunene: ${ulik}</div>` : ''}
+      <a class="vk-lenke" href="${VARSOM_LENKE}" target="_blank" rel="noopener">Se jordskredvarslingen på varsom.no →</a>
+    </div>`;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -1089,6 +1251,7 @@ function init() {
   kalInit();
   lastArealrapport();
   lastKalender();
+  lastVarsom();
 }
 
 init();
