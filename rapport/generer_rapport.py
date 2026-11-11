@@ -191,7 +191,7 @@ def generer_pdf(df, df_5ar, filnavn):
                 ha='center', va='center', fontsize=10, color='#c9d1d9', linespacing=1.6,
                 bbox=dict(boxstyle='round,pad=1', facecolor=PANEL, edgecolor='#30363d'))
 
-        ax.text(0.5, 0.04, 'Utviklet av Norconsult Norge AS v/Torgeir Fiskum Hansvik',
+        ax.text(0.5, 0.04, 'Utviklet av Torgeir Fiskum Hansvik',
                 transform=ax.transAxes, ha='center', fontsize=8, color='#484f58')
         pdf.savefig(fig, facecolor=BG); plt.close()
 
@@ -374,7 +374,7 @@ def generer_pdf(df, df_5ar, filnavn):
 
         d = pdf.infodict()
         d['Title']  = 'Skredvarsel Fv609 Heilevang – Historisk terskelrapport'
-        d['Author'] = 'Norconsult Norge AS v/Torgeir Fiskum Hansvik'
+        d['Author'] = 'Torgeir Fiskum Hansvik'
 
     print(f"  ✅  Rapport lagret: {filnavn}")
 
